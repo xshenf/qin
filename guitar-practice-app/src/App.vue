@@ -1,6 +1,7 @@
 <script setup>
 import { ref, nextTick } from 'vue';
 import ScoreViewer from './components/ScoreViewer.vue';
+import Tuner from './components/Tuner.vue';
 import AudioEngine from './audio/AudioEngine';
 import PracticeEngine from './engine/PracticeEngine';
 
@@ -8,7 +9,11 @@ const scoreViewer = ref(null);
 const isMicActive = ref(false);
 const detectedPitch = ref('--');
 const detectedNote = ref('--');
+const detectedFrequency = ref(null);
 const isPlaying = ref(false);
+
+// 调音器状态
+const showTuner = ref(false);
 
 // 配置选项
 const staveProfile = ref('default'); // default, score, tab
@@ -32,14 +37,24 @@ const toggleMic = async () => {
         if (pitch) {
           detectedPitch.value = pitch.frequency.toFixed(1) + ' Hz';
           detectedNote.value = pitch.note;
+          detectedFrequency.value = pitch.frequency; // 保存数值用于调音器
         } else {
           detectedPitch.value = '--';
           detectedNote.value = '--';
+          detectedFrequency.value = null;
         }
       }, 100);
     } catch (e) {
       alert("麦克风访问失败: " + e.message);
     }
+  }
+};
+
+const toggleTuner = () => {
+  showTuner.value = !showTuner.value;
+  // 打开调音器时自动开启麦克风
+  if (showTuner.value && !isMicActive.value) {
+    toggleMic();
   }
 };
 
@@ -226,6 +241,9 @@ const demoFile = 'https://www.alphatab.net/files/canon.gp';
           <button @click="toggleMic" :class="{ active: isMicActive }" class="mic-btn">
             {{ isMicActive ? '🎤 ON' : '🎤 OFF' }}
           </button>
+          <button @click="toggleTuner" :class="{ active: showTuner }" title="调音器">
+            🎵
+          </button>
           <div class="monitor" v-if="isMicActive">
             <div class="monitor-item">
               <span class="label">音高</span>
@@ -243,6 +261,14 @@ const demoFile = 'https://www.alphatab.net/files/canon.gp';
         @playerReady="handleScoreReady"
       />
     </main>
+
+    <!-- 调音器面板 -->
+    <Tuner 
+      :is-active="showTuner"
+      :detected-note="detectedNote"
+      :detected-pitch="detectedFrequency"
+      @close="showTuner = false"
+    />
   </div>
 </template>
 
