@@ -1,20 +1,21 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, nextTick } from 'vue';
 import ScoreViewer from './components/ScoreViewer.vue';
 import AudioEngine from './audio/AudioEngine';
 import PracticeEngine from './engine/PracticeEngine';
-// Optional: import AlphaTab styles if needed, but usually they are injected or minimal?
-// import '@coderline/alphatab/dist/alphatab.css'; // Check if this exists
 
 const scoreViewer = ref(null);
 const isMicActive = ref(false);
 const detectedPitch = ref('--');
 const detectedNote = ref('--');
-
-// Playback state
 const isPlaying = ref(false);
 
-// Polling for UI feedback
+// 配置选项
+const staveProfile = ref('default'); // default, score, tab
+const zoom = ref(100); // 50-200%
+const playbackSpeed = ref(100); // 50-200%
+const layoutWidth = ref('fit'); // fit, full
+
 let uiInterval = null;
 
 const toggleMic = async () => {
@@ -26,8 +27,6 @@ const toggleMic = async () => {
     try {
       await AudioEngine.startMicrophone();
       isMicActive.value = true;
-      
-      // Visualize pitch
       uiInterval = setInterval(() => {
         const pitch = AudioEngine.getPitch();
         if (pitch) {
@@ -38,14 +37,12 @@ const toggleMic = async () => {
           detectedNote.value = '--';
         }
       }, 100);
-
     } catch (e) {
-      alert("Microphone access failed: " + e.message);
+      alert("麦克风访问失败: " + e.message);
     }
   }
 };
 
-// File handling
 const handleFileSelect = (event) => {
   const file = event.target.files[0];
   if (file && scoreViewer.value) {
@@ -53,66 +50,138 @@ const handleFileSelect = (event) => {
   }
 };
 
-// Playback controls
 const togglePlayback = () => {
   if (scoreViewer.value) {
     scoreViewer.value.playPause();
-    isPlaying.value = !isPlaying.value; // Note: Better to sync with alphaTab events
+    isPlaying.value = !isPlaying.value;
   }
 };
 
 const handleScoreReady = (api) => {
   console.log("Score loaded!", api);
   PracticeEngine.attachScore(api);
-  
-  // Hook into Practice Engine update loop if not already
-  // practiceEngine.start(); // We might play manually for now
+  applySettings(); // 应用初始设置
 };
 
-const handleBeatChanged = (beat) => {
-  // console.log("Beat:", beat);
+// 应用设置到 AlphaTab API
+const applySettings = () => {
+  const api = scoreViewer.value?.getApi();
+  if (!api) return;
+
+  // 谱面类型映射
+  const staveProfileMap = {
+    'default': 0, // Default (Score + Tab)
+    'score': 2,   // Score only
+    'tab': 3      // Tab only
+  };
+
+  // 应用设置
+  api.settings.display.staveProfile = staveProfileMap[staveProfile.value] || 0;
+  api.settings.display.scale = zoom.value / 100;
+  api.playbackSpeed = playbackSpeed.value / 100;
+
+  // 更新设置并重新渲染
+  api.updateSettings();
+  nextTick(() => {
+    api.render();
+  });
 };
 
-// URL to a public GP file or local asset. AlphaTab has a demo file.
-// We'll use a cloud file for test if possible, or just empty.
+// 监听配置变化
+const onStaveProfileChange = () => applySettings();
+const onZoomChange = () => applySettings();
+const onSpeedChange = () => applySettings();
+
 const demoFile = 'https://www.alphatab.net/files/canon.gp'; 
 </script>
 
 <template>
   <div class="app-container">
     <header>
-      <h1>Guitar Practice</h1>
-      
-      <div class="file-controls">
-        <input type="file" accept=".gp,.gp3,.gp4,.gp5,.gpx" @change="handleFileSelect" />
-        <button @click="togglePlayback">
-          {{ isPlaying ? 'Pause' : 'Play Score' }}
-        </button>
+      <div class="header-left">
+        <h1>🎸 Guitar Practice</h1>
       </div>
 
-      <div class="audio-controls">
-        <button @click="toggleMic" :class="{ active: isMicActive }">
-          {{ isMicActive ? 'Mic ON' : 'Mic OFF' }}
-        </button>
-        <div class="monitor">
-          <div class="monitor-item">
-            <span class="label">Pitch</span>
-            <span class="value">{{ detectedPitch }}</span>
-          </div>
-          <div class="monitor-item">
-            <span class="label">Note</span>
-            <span class="value">{{ detectedNote }}</span>
+      <div class="toolbar">
+        <!-- 文件加载 -->
+        <div class="tool-group">
+          <label class="file-btn">
+            📂 加载
+            <input type="file" accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7" @change="handleFileSelect" hidden />
+          </label>
+        </div>
+
+        <!-- 播放控制 -->
+        <div class="tool-group">
+          <button @click="togglePlayback" :class="{ active: isPlaying }">
+            {{ isPlaying ? '⏸ 暂停' : '▶ 播放' }}
+          </button>
+        </div>
+
+        <!-- 谱面类型 -->
+        <div class="tool-group">
+          <label class="control-label">谱面</label>
+          <select v-model="staveProfile" @change="onStaveProfileChange" class="compact-select">
+            <option value="default">混合</option>
+            <option value="score">五线谱</option>
+            <option value="tab">六线谱</option>
+          </select>
+        </div>
+
+        <!-- 缩放 -->
+        <div class="tool-group">
+          <label class="control-label">缩放</label>
+          <select v-model.number="zoom" @change="onZoomChange" class="compact-select">
+            <option :value="50">50%</option>
+            <option :value="75">75%</option>
+            <option :value="100">100%</option>
+            <option :value="125">125%</option>
+            <option :value="150">150%</option>
+            <option :value="200">200%</option>
+          </select>
+        </div>
+
+        <!-- 播放速度 -->
+        <div class="tool-group">
+          <label class="control-label">速度</label>
+          <select v-model.number="playbackSpeed" @change="onSpeedChange" class="compact-select">
+            <option :value="50">50%</option>
+            <option :value="75">75%</option>
+            <option :value="100">100%</option>
+            <option :value="125">125%</option>
+            <option :value="150">150%</option>
+          </select>
+        </div>
+
+        <!-- 宽度模式 -->
+        <div class="tool-group">
+          <label class="control-label">宽度</label>
+          <select v-model="layoutWidth" class="compact-select">
+            <option value="fit">适应</option>
+            <option value="full">撑满</option>
+          </select>
+        </div>
+
+        <!-- 麦克风 -->
+        <div class="tool-group">
+          <button @click="toggleMic" :class="{ active: isMicActive }" class="mic-btn">
+            {{ isMicActive ? '🎤 ON' : '🎤 OFF' }}
+          </button>
+          <div class="monitor" v-if="isMicActive">
+            <div class="monitor-item">
+              <span class="label">音高</span>
+              <span class="value">{{ detectedNote }}</span>
+            </div>
           </div>
         </div>
       </div>
     </header>
 
-    <main>
+    <main :class="'layout-' + layoutWidth">
       <ScoreViewer 
         ref="scoreViewer" 
         :file-url="demoFile"
         @playerReady="handleScoreReady"
-        @beatChanged="handleBeatChanged"
       />
     </main>
   </div>
@@ -124,39 +193,118 @@ const demoFile = 'https://www.alphatab.net/files/canon.gp';
   flex-direction: column;
   height: 100vh;
   padding: 0;
-  background: #1e1e1e; /* Dark theme */
-  color: #fff;
+  background: #1a1a2e;
+  color: #e0e0e0;
 }
 
 header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: #2d2d2d;
-  padding: 15px 20px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.3);
+  background: linear-gradient(135deg, #16213e 0%, #1a1a2e 100%);
+  padding: 10px 20px;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
   z-index: 10;
+  border-bottom: 1px solid #2a2a4a;
 }
 
-h1 {
-  font-size: 1.2rem;
+.header-left h1 {
+  font-size: 1rem;
   margin: 0;
   color: #42b883;
+  white-space: nowrap;
 }
 
-.file-controls, .audio-controls {
+.toolbar {
   display: flex;
-  gap: 15px;
+  gap: 8px;
   align-items: center;
+}
+
+.tool-group {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  padding: 0 6px;
+  border-right: 1px solid #333355;
+}
+
+.tool-group:last-child {
+  border-right: none;
+}
+
+.control-label {
+  font-size: 0.75rem;
+  color: #888;
+  white-space: nowrap;
+}
+
+.compact-select {
+  padding: 4px 8px;
+  background: #2a2a4a;
+  color: #e0e0e0;
+  border: 1px solid #3a3a5a;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.compact-select:hover {
+  border-color: #42b883;
+}
+
+.file-btn {
+  padding: 5px 12px;
+  background: #2a2a4a;
+  color: #e0e0e0;
+  border: 1px solid #3a3a5a;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.file-btn:hover {
+  background: #3a3a5a;
+  border-color: #42b883;
+}
+
+button {
+  padding: 5px 12px;
+  background: #2a2a4a;
+  color: #e0e0e0;
+  border: 1px solid #3a3a5a;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.8rem;
+}
+
+button:hover {
+  background: #3a3a5a;
+  border-color: #42b883;
+}
+
+button.active {
+  background: #42b883;
+  color: #1a1a2e;
+  border-color: #42b883;
+}
+
+button.mic-btn.active {
+  background: #e74c3c;
+  border-color: #c0392b;
+  color: white;
 }
 
 .monitor {
   display: flex;
-  gap: 15px;
-  background: #000;
-  padding: 5px 15px;
+  gap: 8px;
+  background: #111122;
+  padding: 3px 10px;
   border-radius: 4px;
-  border: 1px solid #444;
+  border: 1px solid #333355;
 }
 
 .monitor-item {
@@ -166,33 +314,15 @@ h1 {
 }
 
 .monitor-item .label {
-  font-size: 0.7rem;
-  color: #888;
+  font-size: 0.6rem;
+  color: #666;
 }
 
 .monitor-item .value {
   font-family: monospace;
-  font-size: 1rem;
+  font-size: 0.85rem;
   color: #42b883;
-}
-
-button {
-  padding: 8px 16px;
-  background: #444;
-  color: white;
-  border: 1px solid #555;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-button:hover {
-  background: #555;
-}
-
-button.active {
-  background: #e74c3c;
-  border-color: #c0392b;
+  font-weight: 600;
 }
 
 main {
@@ -200,5 +330,16 @@ main {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+/* 宽度模式 */
+main.layout-fit {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+main.layout-full {
+  width: 100%;
 }
 </style>
