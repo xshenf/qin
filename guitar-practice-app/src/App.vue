@@ -4,6 +4,7 @@ import ScoreViewer from './components/ScoreViewer.vue';
 import Tuner from './components/Tuner.vue';
 import AudioEngine from './audio/AudioEngine';
 import PracticeEngine from './engine/PracticeEngine';
+// import defaultScoreWithUrl from './assets/gtp/Canon_D.gp5?url'; 
 
 const scoreViewer = ref(null);
 const isMicActive = ref(false);
@@ -433,7 +434,8 @@ const onZoomChange = () => applySettings();
 const onSpeedChange = () => applySettings();
 const onWidthChange = () => applySettings();
 
-const demoFile = 'https://www.alphatab.net/files/canon.gp'; 
+const demoFile = '/gtp/Canon_D.gp5'; 
+console.log("Default Score URL:", demoFile);
 </script>
 
 <template>

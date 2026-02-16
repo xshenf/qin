@@ -23,13 +23,20 @@ const emit = defineEmits([
 ]);
 
 const initAlphaTab = () => {
-  if (!scoreContainer.value) return;
+  if (!scoreContainer.value) {
+    console.error("ScoreContainer not found!");
+    return;
+  }
+  console.log("Initializing AlphaTab...", props.fileUrl);
+
   if (api) api.destroy();
 
   const settings = {
+    file: props.fileUrl || '', // Ensure valid file url is passed
     core: {
       // Tell AlphaTab where to find fonts (served from public/)
       fontDirectory: '/font/',
+      useWorkers: true 
     },
     player: {
       enablePlayer: true,
@@ -44,7 +51,20 @@ const initAlphaTab = () => {
     }
   };
 
-  api = new alphaTab.AlphaTabApi(scoreContainer.value, settings);
+  try {
+    api = new alphaTab.AlphaTabApi(scoreContainer.value, settings);
+    console.log("AlphaTab API created successfully");
+    
+    // Debug events
+    api.error.on((e) => {
+      console.error('AlphaTab Error Event:', e);
+    });
+    api.renderFinished.on(() => {
+      console.log('AlphaTab Render Finished');
+    });
+  } catch (e) {
+    console.error("Error creating AlphaTab API:", e);
+  }
 
   // Events - using correct AlphaTab v1.8 event names
   api.scoreLoaded.on((score) => {
@@ -88,24 +108,61 @@ const markers = ref([]); // Array of { style, class }
 
 const markNote = (note, status) => {
   if (!api || !note) return;
-  // AlphaTab 1.3+ has boundsLookup. 
-  // note is the AlphaTab model object.
+  console.log(`Coloring note: ${status}`, note);
+  
+  if (!note.ref) {
+      console.warn("Note reference missing");
+      return;
+  }
+
+  // Use AlphaTab NoteStyle to change color
+  // Status: hit (green), miss (red)
+  const color = status === 'hit' ? 'rgba(66, 184, 131, 1)' : 'rgba(255, 0, 0, 1)';
+  
+  // Note: We need to ensure we have access to AlphaTab model classes.
+  // Assuming 'api' has access or we can just set properties if they are simple objects.
+  // But AlphaTab usually requires class instances for Style.
+  
+  // Let's try to set style on the note.
   try {
-    const bounds = api.renderer.boundsLookup.getNoteBounds(note);
-    if (bounds) {
-       // bounds: x, y, w, h
-       markers.value.push({
-         style: {
-           left: bounds.x + 'px',
-           top: bounds.y + 'px',
-           width: bounds.w + 'px',
-           height: bounds.h + 'px'
-         },
-         class: status === 'hit' ? 'marker-hit' : 'marker-miss'
-       });
-    }
+      // Create style if missing. 
+      // We process the note.ref (AlphaTab Note object)
+      const noteObj = note.ref;
+      
+      // We need alphaTab namespace. 
+      // imports are: import * as alphaTab from '@coderline/alphatab';
+      
+      const NoteStyle = alphaTab.model.NoteStyle;
+      const NoteSubElement = alphaTab.model.NoteSubElement;
+      const Color = alphaTab.model.Color;
+
+      if (!NoteStyle || !NoteSubElement || !Color) {
+          console.error("AlphaTab model classes missing.", { NoteStyle, NoteSubElement, Color });
+          return;
+      }
+
+      if (!noteObj.style) {
+          noteObj.style = new NoteStyle();
+      }
+      
+      // Parse color string to r,g,b,a? 
+      // AlphaTab Color constructor: (a, r, g, b)
+      let atColor;
+      if (status === 'hit') {
+          atColor = new Color(255, 66, 184, 131); 
+      } else {
+          atColor = new Color(255, 255, 0, 0);
+      }
+      
+      noteObj.style.colors.set(NoteSubElement.NoteHead, atColor);
+      noteObj.style.colors.set(NoteSubElement.Stem, atColor); // also color stem
+
+      // Trigger re-render
+      // We should debounce render if possible, but for now direct call
+      api.render();
+      
   } catch (e) {
-    console.error("Error marking note:", e);
+      console.error("Error coloring note:", e);
   }
 };
 
@@ -119,6 +176,7 @@ onMounted(() => {
 const playPause = () => api?.playPause();
 const stop = () => api?.stop();
 const getApi = () => api;
+// ...
 const loadFile = (file) => {
   if (!api) return;
   const reader = new FileReader();
@@ -129,6 +187,17 @@ const loadFile = (file) => {
   };
   reader.readAsArrayBuffer(file);
 };
+
+watch(
+  () => props.fileUrl,
+  (newUrl) => {
+    if (newUrl && api) {
+      console.log("Loading new file from watch:", newUrl);
+      api.load(newUrl);
+    }
+  }
+);
+// ...
 
 // Expose methods
 defineExpose({

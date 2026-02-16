@@ -74,6 +74,9 @@ class PracticeEngine {
                 // Freq = 440 * 2^((midi - 69) / 12)
                 const expectedFreq = 440 * Math.pow(2, (midi - 69) / 12);
 
+                // Debug:
+                console.log(`Checking Note: ${note.id} String:${note.string} Fret:${note.fret} CalcMidi:${midi} ExpFreq:${expectedFreq.toFixed(1)} DetFreq:${detectedFreq.toFixed(1)}`);
+
                 // Tolerance: +/- 0.6 semitone (approx 3.5% freq difference)
                 const diffRatio = detectedFreq / expectedFreq;
                 // 0.6 semitone ratio is approx 1.035
@@ -108,6 +111,7 @@ class PracticeEngine {
 
     // Called by ScoreViewer when beat changes
     updateExpectedNotes(notes) {
+        console.log("PracticeEngine: expected notes updated", notes.length);
         // Check for missed notes in previous beats
         if (this.expectedNotes && this.expectedNotes.length > 0) {
             this.expectedNotes.forEach(note => {
@@ -115,6 +119,7 @@ class PracticeEngine {
                 if (status !== 'hit') {
                     // MISS
                     this.noteStatus.set(note.id, 'miss');
+                    console.log("PracticeEngine: Missed note", note.id);
                     if (this.onNoteResult) {
                         this.onNoteResult({
                             type: 'miss',
@@ -132,14 +137,13 @@ class PracticeEngine {
     getTuning(stringIndex) {
         if (!this.scoreApi || !this.scoreApi.score) return null;
         try {
-            // Assuming single track for now
             const track = this.scoreApi.score.tracks[0];
             const stave = track.staves[0];
-            // AlphaTab string index is 1-based. Tuning array is 0-based.
-            // string 1 is highest pitch? 
-            // In AlphaTab, index 0 is usually highest string.
-            // note.string is 1-based index (1=high E).
-            return stave.stringTuning.tunings[stringIndex - 1];
+            // Log tuning structure once
+            if (Math.random() < 0.01) console.log("TuningObj:", stave.stringTuning);
+
+            // AlphaTab 1.0+: stringTuning.tunings is the array of MIDI values
+            return stave.stringTuning.tunings[stringIndex - 1]; // 0-based array, stringIndex is 1-based
         } catch (e) {
             console.warn("Could not get tuning", e);
             return null;
