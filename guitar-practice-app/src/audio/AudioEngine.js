@@ -98,11 +98,21 @@ class AudioEngine {
         }
     }
 
-    stopMicrophone() {
+    async stopMicrophone() {
         if (this.mediaStream) {
             this.mediaStream.getTracks().forEach(track => track.stop());
             this.mediaStream = null;
         }
+
+        // 挂起 AudioContext 以释放硬件资源，消除录音指示器
+        if (this.audioContext && this.audioContext.state === 'running') {
+            try {
+                await this.audioContext.suspend();
+            } catch (e) {
+                console.error("Failed to suspend AudioContext:", e);
+            }
+        }
+
         this.isListening = false;
         console.log("Microphone stopped.");
     }

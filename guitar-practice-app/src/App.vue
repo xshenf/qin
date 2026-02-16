@@ -38,7 +38,7 @@ let uiInterval = null;
 
 const toggleMic = async () => {
   if (isMicActive.value) {
-    AudioEngine.stopMicrophone();
+    await AudioEngine.stopMicrophone(); // 确保等待资源释放
     isMicActive.value = false;
     clearInterval(uiInterval);
     // 清除音高保持
@@ -225,8 +225,13 @@ const saveRecording = () => {
 };
 
 // 播放/暂停录音
-const togglePlayRecording = () => {
+const togglePlayRecording = async () => {
   if (!recordedAudioUrl.value) return;
+  
+  // 播放前先停止麦克风，防止手机音频路由到听筒（通话模式）导致声音小
+  if (isMicActive.value) {
+    await toggleMic();
+  }
   
   if (!audioPlayer) {
     // 创建音频播放器
@@ -240,8 +245,12 @@ const togglePlayRecording = () => {
     audioPlayer.pause();
     isPlayingRecording.value = false;
   } else {
-    audioPlayer.play();
-    isPlayingRecording.value = true;
+    try {
+      await audioPlayer.play();
+      isPlayingRecording.value = true;
+    } catch (e) {
+      alert('播放失败: ' + e.message);
+    }
   }
 };
 
