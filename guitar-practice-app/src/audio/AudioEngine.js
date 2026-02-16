@@ -11,7 +11,7 @@ class AudioEngine {
 
         // Configuration
         this.sampleRate = 44100;
-        this.bufferSize = 2048; // Higher buffer size = better frequency resolution, more latency
+        this.bufferSize = 4096; // 增加buffer size以提高低频分辨率（原2048）
     }
 
     async init() {
@@ -64,8 +64,24 @@ class AudioEngine {
             // Create source node from stream
             const source = this.audioContext.createMediaStreamSource(this.mediaStream);
 
-            // Connect source to analyser (do NOT connect to destination to avoid feedback loop)
-            source.connect(this.analyser);
+            // === 添加音频滤波器链（针对吉他频率优化） ===
+
+            // 1. 高通滤波器 - 去除低频噪音（< 50Hz）
+            const highpassFilter = this.audioContext.createBiquadFilter();
+            highpassFilter.type = 'highpass';
+            highpassFilter.frequency.value = 50; // 50Hz以支持6弦E2（82Hz）
+            highpassFilter.Q.value = 0.7;
+
+            // 2. 低通滤波器 - 去除高频噪音（> 5000Hz）
+            const lowpassFilter = this.audioContext.createBiquadFilter();
+            lowpassFilter.type = 'lowpass';
+            lowpassFilter.frequency.value = 5000;
+            lowpassFilter.Q.value = 0.7;
+
+            // 连接滤波器链: source -> 高通 -> 低通 -> analyser
+            source.connect(highpassFilter);
+            highpassFilter.connect(lowpassFilter);
+            lowpassFilter.connect(this.analyser);
 
             this.isListening = true;
             console.log("Microphone started with noise suppression enabled.");
@@ -97,8 +113,8 @@ class AudioEngine {
         }
         const averageVolume = sum / this.buffer.length;
 
-        // 音量阈值（0.02表示忽略非常微弱的声音）
-        const volumeThreshold = 0.02;
+        // 音量阈值（降低到0.005以检测吉他余音）
+        const volumeThreshold = 0.005;
         if (averageVolume < volumeThreshold) {
             return null; // 音量太小，忽略（可能是环境噪音）
         }
@@ -108,6 +124,18 @@ class AudioEngine {
 
         // Pitchfinder returns null if no pitch is detected or confidence is low
         if (frequency) {
+            // === 频率范围验证 - 过滤错误检测 ===
+            // 吉他频率范围：E2(82Hz) 到 E6 22品(1318Hz)
+            // 扩大范围到 50Hz - 2000Hz 以涵盖6弦和泛音
+            const minFreq = 50;
+            const maxFreq = 2000;
+
+            if (frequency < minFreq || frequency > maxFreq) {
+                // 频率超出吉他范围，忽略（可能是检测错误或倍频）
+                console.log(`Ignored invalid frequency: ${frequency}Hz`);
+                return null;
+            }
+
             return {
                 frequency: frequency, // Hz
                 note: this.frequencyToNoteName(frequency),

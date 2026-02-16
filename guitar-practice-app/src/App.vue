@@ -41,20 +41,40 @@ const toggleMic = async () => {
     AudioEngine.stopMicrophone();
     isMicActive.value = false;
     clearInterval(uiInterval);
+    // 清除音高保持
+    detectedPitch.value = '--';
+    detectedNote.value = '--';
+    detectedFrequency.value = null;
   } else {
     try {
       await AudioEngine.startMicrophone();
       isMicActive.value = true;
+      
+      let lastDetectedTime = 0;
+      let lastPitch = null;
+      
       uiInterval = setInterval(() => {
         const pitch = AudioEngine.getPitch();
+        const now = Date.now();
+        
         if (pitch) {
+          // 检测到新音高，立即更新
           detectedPitch.value = pitch.frequency.toFixed(1) + ' Hz';
           detectedNote.value = pitch.note;
-          detectedFrequency.value = pitch.frequency; // 保存数值用于调音器
+          detectedFrequency.value = pitch.frequency;
+          lastDetectedTime = now;
+          lastPitch = pitch;
+        } else if (lastPitch && (now - lastDetectedTime < 500)) {
+          // 没检测到但在500ms内，保持上次的音高（余音效果）
+          detectedPitch.value = lastPitch.frequency.toFixed(1) + ' Hz';
+          detectedNote.value = lastPitch.note;
+          detectedFrequency.value = lastPitch.frequency;
         } else {
+          // 超过500ms没检测到，清除显示
           detectedPitch.value = '--';
           detectedNote.value = '--';
           detectedFrequency.value = null;
+          lastPitch = null;
         }
       }, 100);
     } catch (e) {
