@@ -15,6 +15,9 @@ const isPlaying = ref(false);
 // 调音器状态
 const showTuner = ref(false);
 
+// 全屏状态
+const isFullscreen = ref(false);
+
 // 配置选项
 const staveProfile = ref('default'); // default, score, tab
 const zoom = ref(100); // 50-200%
@@ -57,6 +60,42 @@ const toggleTuner = () => {
     toggleMic();
   }
 };
+
+// 全屏切换
+const toggleFullscreen = async () => {
+  try {
+    if (!document.fullscreenElement) {
+      // 进入全屏
+      await document.documentElement.requestFullscreen();
+      isFullscreen.value = true;
+      
+      // 尝试锁定为横屏（可选，部分浏览器支持）
+      if (screen.orientation && screen.orientation.lock) {
+        try {
+          await screen.orientation.lock('landscape');
+        } catch (e) {
+          console.log('横屏锁定不支持:', e);
+        }
+      }
+    } else {
+      // 退出全屏
+      await document.exitFullscreen();
+      isFullscreen.value = false;
+      
+      // 解锁屏幕方向
+      if (screen.orientation && screen.orientation.unlock) {
+        screen.orientation.unlock();
+      }
+    }
+  } catch (e) {
+    console.error('全屏切换失败:', e);
+  }
+};
+
+// 监听全屏变化（用户按ESC退出时同步状态）
+document.addEventListener('fullscreenchange', () => {
+  isFullscreen.value = !!document.fullscreenElement;
+});
 
 const handleFileSelect = (event) => {
   const file = event.target.files[0];
@@ -234,6 +273,13 @@ const demoFile = 'https://www.alphatab.net/files/canon.gp';
             <option value="fit">适应</option>
             <option value="full">撑满</option>
           </select>
+        </div>
+
+        <!-- 全屏 -->
+        <div class="tool-group">
+          <button @click="toggleFullscreen" :class="{ active: isFullscreen }" title="全屏 / 横屏">
+            {{ isFullscreen ? '🔳' : '⛶' }}
+          </button>
         </div>
 
         <!-- 麦克风 -->
@@ -489,6 +535,174 @@ main.layout-full :deep(.score-container) {
   50% {
     transform: scale(1.05);
     opacity: 0.8;
+  }
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  header {
+    flex-direction: column;
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .header-left h1 {
+    font-size: 0.9rem;
+  }
+
+  .toolbar {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: space-between;
+  }
+
+  .tool-group {
+    padding: 0 4px;
+    border-right: none;
+  }
+
+  .control-label {
+    display: none; /* 隐藏标签节省空间 */
+  }
+
+  .compact-select {
+    font-size: 0.75rem;
+    padding: 4px 6px;
+  }
+
+  button {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+    min-width: 44px; /* 确保触摸目标足够大 */
+    min-height: 44px;
+  }
+
+  .file-btn {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+  }
+
+  .monitor {
+    padding: 2px 8px;
+  }
+
+  .monitor-item .label {
+    font-size: 0.55rem;
+  }
+
+  .monitor-item .value {
+    font-size: 0.75rem;
+  }
+
+  /* 调音器在移动端全屏显示 */
+  .tuner-panel {
+    width: 95vw;
+    min-width: unset;
+    max-width: 500px;
+    padding: 15px;
+  }
+
+  .tuner-header h3 {
+    font-size: 1rem;
+  }
+
+  .strings {
+    grid-template-columns: repeat(3, 1fr); /* 移动端分2行显示 */
+  }
+
+  .detected-pitch {
+    padding: 10px;
+  }
+
+  .pitch-note {
+    font-size: 2rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .header-left h1 {
+    font-size: 0.8rem;
+  }
+
+  button, .file-btn {
+    padding: 8px;
+    font-size: 0.7rem;
+  }
+
+  .compact-select {
+    font-size: 0.7rem;
+    padding: 4px;
+  }
+
+  /* 更紧凑的工具栏 */
+  .toolbar {
+    gap: 4px;
+  }
+
+  .tool-group {
+    flex: 1;
+    min-width: fit-content;
+  }
+}
+
+/* 横屏优化 */
+@media (orientation: landscape) and (max-height: 600px) {
+  header {
+    padding: 4px 10px;
+  }
+
+  .header-left h1 {
+    font-size: 0.8rem;
+  }
+
+  button {
+    padding: 4px 8px;
+    min-height: 36px;
+  }
+
+  .toolbar {
+    gap: 4px;
+  }
+}
+
+/* 全屏模式优化 */
+.app-container:fullscreen {
+  background: white;
+}
+
+.app-container:fullscreen header {
+  background: rgba(22, 33, 62, 0.95);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  backdrop-filter: blur(10px);
+}
+
+.app-container:fullscreen main {
+  padding-top: 60px;
+}
+
+/* 全屏横屏模式 - 最大化乐谱显示 */
+@media (orientation: landscape) {
+  .app-container:fullscreen header {
+    padding: 2px 10px;
+  }
+
+  .app-container:fullscreen .header-left h1 {
+    font-size: 0.7rem;
+  }
+
+  .app-container:fullscreen button {
+    font-size: 0.7rem;
+    padding: 3px 6px;
+    min-height: 32px;
+  }
+
+  .app-container:fullscreen main {
+    padding-top: 45px;
   }
 }
 </style>
