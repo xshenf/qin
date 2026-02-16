@@ -11,7 +11,7 @@ class AudioEngine {
 
         // Configuration
         this.sampleRate = 44100;
-        this.bufferSize = 4096; // 增加buffer size以提高低频分辨率（原2048）
+        this.bufferSize = 8192; // 增大以提高低频分辨率，特别是移动端
     }
 
     async init() {
@@ -46,13 +46,13 @@ class AudioEngine {
                 await this.audioContext.resume();
             }
 
-            // 音频约束 - 启用降噪和优化
+            // 音频约束 - 针对移动端低频优化
+            // 关闭噪音抑制和自动增益，它们可能过滤/压制低频
             const constraints = {
                 audio: {
-                    echoCancellation: true,      // 回声消除
-                    noiseSuppression: true,       // 噪音抑制
-                    autoGainControl: true,        // 自动增益控制
-                    sampleRate: 44100,            // 采样率
+                    echoCancellation: false,      // 关闭回声消除
+                    noiseSuppression: false,      // 关闭噪音抑制（保留低频）
+                    autoGainControl: false,       // 关闭自动增益（避免压制低频）
                     channelCount: 1               // 单声道
                 },
                 video: false
@@ -64,23 +64,30 @@ class AudioEngine {
             // Create source node from stream
             const source = this.audioContext.createMediaStreamSource(this.mediaStream);
 
-            // === 添加音频滤波器链（针对吉他频率优化） ===
+            // === 添加音频滤波器链（针对移动端低频优化） ===
 
-            // 1. 高通滤波器 - 去除低频噪音（< 50Hz）
+            // 1. 高通滤波器 - 去除极低频噪音（< 30Hz）
             const highpassFilter = this.audioContext.createBiquadFilter();
             highpassFilter.type = 'highpass';
-            highpassFilter.frequency.value = 50; // 50Hz以支持6弦E2（82Hz）
-            highpassFilter.Q.value = 0.7;
+            highpassFilter.frequency.value = 30; // 降低到30Hz给低音更多余地
+            highpassFilter.Q.value = 0.5;
 
-            // 2. 低通滤波器 - 去除高频噪音（> 5000Hz）
+            // 2. 低频增强 - 提升吉他低音弦（60-150Hz）
+            const lowShelf = this.audioContext.createBiquadFilter();
+            lowShelf.type = 'lowshelf';
+            lowShelf.frequency.value = 120; // 中心频率
+            lowShelf.gain.value = 12; // 提升12dB补偿手机麦克风
+
+            // 3. 低通滤波器 - 去除高频噪音（> 5000Hz）
             const lowpassFilter = this.audioContext.createBiquadFilter();
             lowpassFilter.type = 'lowpass';
             lowpassFilter.frequency.value = 5000;
             lowpassFilter.Q.value = 0.7;
 
-            // 连接滤波器链: source -> 高通 -> 低通 -> analyser
+            // 连接: source -> 高通 -> 低频增强 -> 低通 -> analyser
             source.connect(highpassFilter);
-            highpassFilter.connect(lowpassFilter);
+            highpassFilter.connect(lowShelf);
+            lowShelf.connect(lowpassFilter);
             lowpassFilter.connect(this.analyser);
 
             this.isListening = true;
@@ -113,8 +120,8 @@ class AudioEngine {
         }
         const averageVolume = sum / this.buffer.length;
 
-        // 音量阈值（降低到0.005以检测吉他余音）
-        const volumeThreshold = 0.005;
+        // 音量阈值（降低到0.001以最大化移动端灵敏度）
+        const volumeThreshold = 0.001;
         if (averageVolume < volumeThreshold) {
             return null; // 音量太小，忽略（可能是环境噪音）
         }
