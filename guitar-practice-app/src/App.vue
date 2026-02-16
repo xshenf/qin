@@ -117,8 +117,20 @@ const toggleRecording = async () => {
         await toggleMic();
       }
 
+      // 音频约束 - 启用降噪和优化
+      const constraints = {
+        audio: {
+          echoCancellation: true,      // 回声消除
+          noiseSuppression: true,       // 噪音抑制
+          autoGainControl: true,        // 自动增益控制
+          sampleRate: 44100,            // 采样率
+          channelCount: 1               // 单声道（减小文件大小）
+        },
+        video: false
+      };
+
       // 获取音频流
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       
       // 创建 MediaRecorder
       mediaRecorder = new MediaRecorder(stream, {
