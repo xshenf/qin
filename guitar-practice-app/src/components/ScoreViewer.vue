@@ -32,6 +32,9 @@ const initAlphaTab = () => {
     },
     player: {
       enablePlayer: true,
+      enableCursor: true,
+      enableAnimatedBeatCursor: true,
+      enableElementHighlighting: true,
       // Served from public/soundfont/
       soundFont: '/soundfont/sonivox.sf2',
       scrollElement: scoreContainer.value.parentElement
@@ -125,10 +128,30 @@ defineExpose({
 .score-wrapper {
   width: 100%;
   flex: 1;
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: white;
+  box-sizing: border-box;
 }
 .score-container {
   min-height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+}
+</style>
+
+<style>
+/* AlphaTab 全局样式 - 播放高亮 */
+.at-cursor-bar {
+  background: rgba(255, 242, 0, 0.25) !important;
+}
+.at-cursor-beat {
+  background: rgba(64, 64, 255, 0.75) !important;
+  width: 3px !important;
+}
+.at-highlight * {
+  fill: #0078ff !important;
+  stroke: #0078ff !important;
 }
 </style>

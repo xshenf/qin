@@ -356,15 +356,16 @@ main.layout-full {
   padding: 0;
 }
 
-/* 强制移除撑满模式下的所有 margin 和 padding */
-main.layout-full :deep(*) {
+/* 撑满模式 - 精确控制特定元素而非所有元素 */
+main.layout-full :deep(.score-wrapper) {
+  width: 100% !important;
+  max-width: 100% !important;
   margin: 0 !important;
-  padding: 0 !important;
 }
 
-main.layout-full :deep(.score-wrapper),
 main.layout-full :deep(.score-container) {
   width: 100% !important;
   max-width: 100% !important;
+  margin: 0 !important;
 }
 </style>
