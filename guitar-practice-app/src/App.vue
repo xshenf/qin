@@ -18,6 +18,16 @@ const showTuner = ref(false);
 // 全屏状态
 const isFullscreen = ref(false);
 
+// 录音状态
+const isRecording = ref(false);
+const recordingTime = ref(0);
+const recordedAudioUrl = ref(null); // 录音的 blob URL
+const isPlayingRecording = ref(false); // 是否正在播放录音
+let mediaRecorder = null;
+let recordedChunks = [];
+let recordingTimer = null;
+let audioPlayer = null; // 音频播放器
+
 // 配置选项
 const staveProfile = ref('default'); // default, score, tab
 const zoom = ref(100); // 50-200%
@@ -96,6 +106,142 @@ const toggleFullscreen = async () => {
 document.addEventListener('fullscreenchange', () => {
   isFullscreen.value = !!document.fullscreenElement;
 });
+
+// 录音功能
+const toggleRecording = async () => {
+  if (!isRecording.value) {
+    // 开始录音
+    try {
+      // 确保麦克风已开启
+      if (!isMicActive.value) {
+        await toggleMic();
+      }
+
+      // 获取音频流
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      
+      // 创建 MediaRecorder
+      mediaRecorder = new MediaRecorder(stream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+      
+      recordedChunks = [];
+      
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          recordedChunks.push(event.data);
+        }
+      };
+      
+      mediaRecorder.onstop = () => {
+        // 停止所有音频轨道
+        stream.getTracks().forEach(track => track.stop());
+      };
+      
+      mediaRecorder.start();
+      isRecording.value = true;
+      recordingTime.value = 0;
+      
+      // 启动计时器
+      recordingTimer = setInterval(() => {
+        recordingTime.value++;
+      }, 1000);
+      
+    } catch (e) {
+      alert('录音启动失败: ' + e.message);
+      console.error('录音失败:', e);
+    }
+  } else {
+    // 停止录音
+    stopRecording();
+  }
+};
+
+const stopRecording = () => {
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.stop();
+    isRecording.value = false;
+    clearInterval(recordingTimer);
+    
+    // 创建录音 blob 和 URL
+    setTimeout(() => {
+      if (recordedChunks.length > 0) {
+        const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+        // 清理之前的 URL
+        if (recordedAudioUrl.value) {
+          URL.revokeObjectURL(recordedAudioUrl.value);
+        }
+        recordedAudioUrl.value = URL.createObjectURL(blob);
+      }
+    }, 100);
+  }
+};
+
+const saveRecording = () => {
+  if (recordedChunks.length === 0) {
+    alert('没有录音数据');
+    return;
+  }
+  
+  const blob = new Blob(recordedChunks, { type: 'audio/webm' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `guitar-recording-${new Date().getTime()}.webm`;
+  a.click();
+  URL.revokeObjectURL(url);
+};
+
+// 播放/暂停录音
+const togglePlayRecording = () => {
+  if (!recordedAudioUrl.value) return;
+  
+  if (!audioPlayer) {
+    // 创建音频播放器
+    audioPlayer = new Audio(recordedAudioUrl.value);
+    audioPlayer.addEventListener('ended', () => {
+      isPlayingRecording.value = false;
+    });
+  }
+  
+  if (isPlayingRecording.value) {
+    audioPlayer.pause();
+    isPlayingRecording.value = false;
+  } else {
+    audioPlayer.play();
+    isPlayingRecording.value = true;
+  }
+};
+
+// 停止播放录音
+const stopPlayRecording = () => {
+  if (audioPlayer) {
+    audioPlayer.pause();
+    audioPlayer.currentTime = 0;
+    isPlayingRecording.value = false;
+  }
+};
+
+// 清除录音
+const clearRecording = () => {
+  stopPlayRecording();
+  if (recordedAudioUrl.value) {
+    URL.revokeObjectURL(recordedAudioUrl.value);
+    recordedAudioUrl.value = null;
+  }
+  if (audioPlayer) {
+    audioPlayer = null;
+  }
+  recordedChunks = [];
+  recordingTime.value = 0;
+};
+
+// 格式化录音时长
+const formatRecordingTime = (seconds) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+};
 
 const handleFileSelect = (event) => {
   const file = event.target.files[0];
@@ -297,6 +443,34 @@ const demoFile = 'https://www.alphatab.net/files/canon.gp';
             </div>
           </div>
         </div>
+
+        <!-- 录音 -->
+        <div class="tool-group">
+          <button @click="toggleRecording" :class="{ active: isRecording }" class="record-btn" title="录音">
+            <span v-if="isRecording" class="recording-dot"></span>
+            {{ isRecording ? '⏺ 停止' : '⏺ 录音' }}
+          </button>
+          <button 
+            v-if="recordedAudioUrl && !isRecording" 
+            @click="togglePlayRecording" 
+            :class="{ active: isPlayingRecording }"
+            title="播放录音"
+          >
+            {{ isPlayingRecording ? '⏸' : '▶️' }}
+          </button>
+          <button v-if="recordedAudioUrl && !isRecording" @click="saveRecording" title="保存录音">
+            💾
+          </button>
+          <button v-if="recordedAudioUrl && !isRecording" @click="clearRecording" title="删除录音">
+            🗑️
+          </button>
+          <div class="monitor" v-if="isRecording">
+            <div class="monitor-item">
+              <span class="label">时长</span>
+              <span class="value">{{ formatRecordingTime(recordingTime) }}</span>
+            </div>
+          </div>
+        </div>
       </div>
     </header>
 
@@ -431,6 +605,35 @@ button.mic-btn.active {
   background: #e74c3c;
   border-color: #c0392b;
   color: white;
+}
+
+button.record-btn.active {
+  background: #e74c3c;
+  border-color: #c0392b;
+  color: white;
+  position: relative;
+}
+
+.recording-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 8px;
+  height: 8px;
+  background: #ff0000;
+  border-radius: 50%;
+  animation: recording-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes recording-pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(1.2);
+  }
 }
 
 .monitor {
