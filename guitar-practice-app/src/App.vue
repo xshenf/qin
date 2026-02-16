@@ -680,28 +680,33 @@ button.record-btn.active {
 .monitor {
   display: flex;
   gap: 8px;
-  background: #111122;
-  padding: 3px 10px;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px 10px;
   border-radius: 4px;
-  border: 1px solid #333355;
 }
 
 .monitor-item {
   display: flex;
   flex-direction: column;
   align-items: center;
+  min-width: 45px; /* 固定最小宽度防止跳动 */
 }
 
 .monitor-item .label {
   font-size: 0.6rem;
-  color: #666;
+  color: #888;
+  line-height: 1;
 }
 
 .monitor-item .value {
-  font-family: monospace;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
+  font-weight: bold;
   color: #42b883;
-  font-weight: 600;
+  line-height: 1.2;
+  font-family: monospace; /* 等宽字体防止数字跳动 */
+  min-width: 40px; /* 确保值区域有足够空间 */
+  text-align: center;
 }
 
 main {
