@@ -24,7 +24,7 @@
       <div class="detected-pitch" :class="{ accurate: detectedNote && detectedNote !== '--' && Math.abs(cents) <= 5 }">
         <div class="pitch-note">{{ detectedNote || '--' }}</div>
         <div class="pitch-freq">{{ detectedFrequency || '--' }}</div>
-        <div v-if="detectedNote && detectedNote !== '--' && Math.abs(cents) <= 5" class="accurate-badge">
+        <div class="accurate-badge">
           ✓ 音准准确
         </div>
       </div>
@@ -47,8 +47,8 @@
       </div>
 
       <!-- 偏差显示 -->
-      <div class="cents-display" v-if="cents !== null">
-        {{ cents > 0 ? '+' : '' }}{{ cents }} cents
+      <div class="cents-display">
+        {{ cents !== null ? (cents > 0 ? '+' : '') + cents + ' cents' : '&nbsp;' }}
       </div>
     </div>
   </div>
@@ -172,6 +172,18 @@ const needleClass = computed(() => {
   margin-bottom: 20px;
 }
 
+/* 响应式网格布局 */
+@media (max-width: 600px) {
+  .strings {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  
+  /* 移动端调低弦的字体大小以适应 */
+  .string-note {
+    font-size: 0.9rem;
+  }
+}
+
 .string-item {
   text-align: center;
   padding: 8px;
@@ -210,7 +222,13 @@ const needleClass = computed(() => {
   padding: 15px;
   background: rgba(0, 0, 0, 0.3);
   border-radius: 8px;
+  border: 3px solid transparent; /* 预留边框空间防止抖动 */
   transition: all 0.3s ease;
+  min-height: 150px; /* 预留高度给徽章 */
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 
 .detected-pitch.accurate {
@@ -258,19 +276,15 @@ const needleClass = computed(() => {
   font-weight: bold;
   font-size: 1rem;
   display: inline-block;
-  animation: badge-bounce 0.5s ease-out;
+  opacity: 0;           /* 默认隐藏但占位 */
+  transform: scale(0.8);
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-@keyframes badge-bounce {
-  0% {
-    transform: scale(0);
-  }
-  50% {
-    transform: scale(1.1);
-  }
-  100% {
-    transform: scale(1);
-  }
+.detected-pitch.accurate .accurate-badge {
+  opacity: 1;
+  transform: scale(1);
+  animation: none; /* 移除原来的bounce动画，改用transition */
 }
 
 .tuner-indicator {
@@ -351,5 +365,7 @@ const needleClass = computed(() => {
   font-weight: bold;
   color: #42b883;
   font-family: monospace;
+  min-height: 1.8rem; /* 预留高度防止跳动 */
+  margin-top: 10px;
 }
 </style>

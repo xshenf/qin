@@ -1,5 +1,5 @@
 <script setup>
-import { ref, nextTick } from 'vue';
+import { ref, nextTick, watch } from 'vue';
 import ScoreViewer from './components/ScoreViewer.vue';
 import Tuner from './components/Tuner.vue';
 import AudioEngine from './audio/AudioEngine';
@@ -34,7 +34,19 @@ const zoom = ref(100); // 50-200%
 const playbackSpeed = ref(100); // 50-200%
 const layoutWidth = ref('fit'); // fit, full
 
+// 自动检测移动端，默认开启低音增强
+const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+const bassBoost = ref(isMobile);
+
 let uiInterval = null;
+
+// 监听低音增强变化，如果麦克风开启中则重启
+watch(bassBoost, async (newValue) => {
+  if (isMicActive.value) {
+    await toggleMic(); // 关闭
+    await toggleMic(); // 重新开启（会应用新配置）
+  }
+});
 
 const toggleMic = async () => {
   if (isMicActive.value) {
@@ -47,7 +59,8 @@ const toggleMic = async () => {
     detectedFrequency.value = null;
   } else {
     try {
-      await AudioEngine.startMicrophone();
+      // 传入低音增强配置
+      await AudioEngine.startMicrophone({ bassBoost: bassBoost.value });
       isMicActive.value = true;
       
       let lastDetectedTime = 0;
@@ -469,10 +482,26 @@ const demoFile = 'https://www.alphatab.net/files/canon.gp';
           </button>
         </div>
 
-        <!-- 麦克风 -->
+        <!-- 调音器/麦克风组 -->
         <div class="tool-group">
-          <button @click="toggleMic" :class="{ active: isMicActive }" class="mic-btn">
-            {{ isMicActive ? '🎤 ON' : '🎤 OFF' }}
+          <!-- 调音器开关 -->
+          <button 
+            @click="toggleMic" 
+            class="tool-btn"
+            :class="{ active: isMicActive }"
+            title="开启麦克风/调音器"
+          >
+            {{ isMicActive ? '停止调音' : '开始调音' }}
+          </button>
+          
+          <!-- 低音增强开关 (仅在麦克风开启时显示，或者始终显示) -->
+          <button 
+            @click="bassBoost = !bassBoost" 
+            class="tool-btn"
+            :class="{ active: bassBoost }"
+            title="开启低音增强（推荐手机端开启）"
+          >
+            {{ bassBoost ? '增强:开' : '增强:关' }}
           </button>
           <button @click="toggleTuner" :class="{ active: showTuner }" title="调音器">
             🎵

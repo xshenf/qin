@@ -38,7 +38,9 @@ class AudioEngine {
         }
     }
 
-    async startMicrophone() {
+    async startMicrophone(options = {}) {
+        const { bassBoost = false } = options;
+
         if (!this.audioContext) await this.init();
 
         try {
@@ -46,14 +48,15 @@ class AudioEngine {
                 await this.audioContext.resume();
             }
 
-            // 音频约束 - 针对移动端低频优化
-            // 关闭噪音抑制和自动增益，它们可能过滤/压制低频
+            // 音频约束
+            // 如果开启低音增强（通常是移动端），关闭降噪以避免滤除低频
+            // 否则使用默认降噪配置（桌面端）
             const constraints = {
                 audio: {
-                    echoCancellation: false,      // 关闭回声消除
-                    noiseSuppression: false,      // 关闭噪音抑制（保留低频）
-                    autoGainControl: false,       // 关闭自动增益（避免压制低频）
-                    channelCount: 1               // 单声道
+                    echoCancellation: !bassBoost, // 移动端关闭回声消除
+                    noiseSuppression: !bassBoost, // 移动端关闭降噪
+                    autoGainControl: !bassBoost,  // 移动端关闭自动增益
+                    channelCount: 1
                 },
                 video: false
             };
@@ -64,34 +67,42 @@ class AudioEngine {
             // Create source node from stream
             const source = this.audioContext.createMediaStreamSource(this.mediaStream);
 
-            // === 添加音频滤波器链（针对移动端低频优化） ===
+            // === 音频滤波器链 ===
 
-            // 1. 高通滤波器 - 去除极低频噪音（< 30Hz）
+            // 1. 高通滤波器
             const highpassFilter = this.audioContext.createBiquadFilter();
             highpassFilter.type = 'highpass';
-            highpassFilter.frequency.value = 30; // 降低到30Hz给低音更多余地
-            highpassFilter.Q.value = 0.5;
+            // 开启低音增强时降低到30Hz，否则使用50Hz
+            highpassFilter.frequency.value = bassBoost ? 30 : 50;
+            highpassFilter.Q.value = bassBoost ? 0.5 : 0.7;
 
-            // 2. 低频增强 - 提升吉他低音弦（60-150Hz）
-            const lowShelf = this.audioContext.createBiquadFilter();
-            lowShelf.type = 'lowshelf';
-            lowShelf.frequency.value = 120; // 中心频率
-            lowShelf.gain.value = 12; // 提升12dB补偿手机麦克风
-
-            // 3. 低通滤波器 - 去除高频噪音（> 5000Hz）
+            // 2. 低通滤波器
             const lowpassFilter = this.audioContext.createBiquadFilter();
             lowpassFilter.type = 'lowpass';
             lowpassFilter.frequency.value = 5000;
             lowpassFilter.Q.value = 0.7;
 
-            // 连接: source -> 高通 -> 低频增强 -> 低通 -> analyser
-            source.connect(highpassFilter);
-            highpassFilter.connect(lowShelf);
-            lowShelf.connect(lowpassFilter);
-            lowpassFilter.connect(this.analyser);
+            // 构建连接链路
+            if (bassBoost) {
+                // 开启低音增强：Source -> HighPass -> LowShelf -> LowPass -> Analyser
+                const lowShelf = this.audioContext.createBiquadFilter();
+                lowShelf.type = 'lowshelf';
+                lowShelf.frequency.value = 120;
+                lowShelf.gain.value = 12; // +12dB
+
+                source.connect(highpassFilter);
+                highpassFilter.connect(lowShelf);
+                lowShelf.connect(lowpassFilter);
+                lowpassFilter.connect(this.analyser);
+            } else {
+                // 标准模式：Source -> HighPass -> LowPass -> Analyser
+                source.connect(highpassFilter);
+                highpassFilter.connect(lowpassFilter);
+                lowpassFilter.connect(this.analyser);
+            }
 
             this.isListening = true;
-            console.log("Microphone started with noise suppression enabled.");
+            console.log(`Microphone started (Bass Boost: ${bassBoost ? 'ON' : 'OFF'})`);
         } catch (e) {
             console.error("Failed to access microphone:", e);
             throw e;
