@@ -38,8 +38,7 @@ const initAlphaTab = () => {
       // Served from public/soundfont/
       soundFont: '/soundfont/sonivox.sf2',
       scrollElement: scoreContainer.value.parentElement,
-      scrollMode: 'off-screen', // 只有当光标移出屏幕时才滚动，且瞬间跳转，避免长距离滚动延迟
-      scrollSpeed: 300,        // 提高滚动速度（如果使用 smooth 模式）
+      scrollSpeed: 10,        // 调整滚动速度 (更小的值 = 更快的动画?) 尝试 100ms
       scrollOffsetX: 0,
     }
   };
