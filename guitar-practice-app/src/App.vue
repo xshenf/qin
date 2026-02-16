@@ -50,6 +50,48 @@ const handleFileSelect = (event) => {
   }
 };
 
+// 拖放功能
+const isDragging = ref(false);
+
+const handleDragOver = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  isDragging.value = true;
+};
+
+const handleDragLeave = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  isDragging.value = false;
+};
+
+const handleDrop = (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  isDragging.value = false;
+  
+  const files = e.dataTransfer.files;
+  if (files.length > 0) {
+    const file = files[0];
+    // 检查文件扩展名
+    const validExtensions = ['.gp', '.gp3', '.gp4', '.gp5', '.gpx', '.gp7'];
+    const fileName = file.name.toLowerCase();
+    const isValid = validExtensions.some(ext => fileName.endsWith(ext));
+    
+    if (isValid && scoreViewer.value) {
+      // 重置播放状态
+      if (isPlaying.value) {
+        scoreViewer.value.stop();
+        isPlaying.value = false;
+      }
+      // 加载新文件
+      scoreViewer.value.loadFile(file);
+    } else {
+      alert('请拖入有效的 Guitar Pro 文件 (.gp, .gp3, .gp4, .gp5, .gpx, .gp7)');
+    }
+  }
+};
+
 const togglePlayback = () => {
   if (scoreViewer.value) {
     scoreViewer.value.playPause();
@@ -100,7 +142,20 @@ const demoFile = 'https://www.alphatab.net/files/canon.gp';
 </script>
 
 <template>
-  <div class="app-container">
+  <div 
+    class="app-container"
+    @dragover="handleDragOver"
+    @dragleave="handleDragLeave"
+    @drop="handleDrop"
+  >
+    <!-- 拖放提示覆盖层 -->
+    <div v-if="isDragging" class="drag-overlay">
+      <div class="drag-hint">
+        <div class="drag-icon">📂</div>
+        <div class="drag-text">拖放 Guitar Pro 文件到此处</div>
+      </div>
+    </div>
+
     <header>
       <div class="header-left">
         <h1>🎸 Guitar Practice</h1>
@@ -367,5 +422,47 @@ main.layout-full :deep(.score-container) {
   width: 100% !important;
   max-width: 100% !important;
   margin: 0 !important;
+}
+
+/* 拖放覆盖层 */
+.drag-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(26, 26, 46, 0.95);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.drag-hint {
+  text-align: center;
+  color: #42b883;
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
+.drag-icon {
+  font-size: 5rem;
+  margin-bottom: 20px;
+}
+
+.drag-text {
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+@keyframes pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 0.8;
+  }
 }
 </style>
