@@ -38,7 +38,23 @@ const layoutWidth = ref('fit'); // fit, full
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 const bassBoost = ref(isMobile);
 
+// 练习模式状态
+const isPracticeMode = ref(false);
+const tempoFeedback = ref('--');
+const feedbackColor = ref('#888');
+
 let uiInterval = null;
+
+const togglePractice = () => {
+  isPracticeMode.value = !isPracticeMode.value;
+  if (isPracticeMode.value) {
+    if (!isMicActive.value) toggleMic(); // 自动开启麦克风
+    PracticeEngine.start();
+  } else {
+    PracticeEngine.stop();
+    tempoFeedback.value = '--';
+  }
+};
 
 // 监听低音增强变化，如果麦克风开启中则重启
 watch(bassBoost, async (newValue) => {
@@ -328,7 +344,7 @@ const handleDrop = (e) => {
   if (files.length > 0) {
     const file = files[0];
     // 检查文件扩展名
-    const validExtensions = ['.gp', '.gp3', '.gp4', '.gp5', '.gpx', '.gp7'];
+    const validExtensions = ['.gp', '.gp3', '.gp4', '.gp5', '.gpx', '.gp7', '.gtp', '.gp8'];
     const fileName = file.name.toLowerCase();
     const isValid = validExtensions.some(ext => fileName.endsWith(ext));
     
@@ -356,6 +372,31 @@ const togglePlayback = () => {
 const handleScoreReady = (api) => {
   console.log("Score loaded!", api);
   PracticeEngine.attachScore(api);
+  
+  // 设置练习回调
+  PracticeEngine.setResultCallback((result) => {
+    // 标记音符
+    if (scoreViewer.value) {
+      scoreViewer.value.markNote(result.noteRef, result.type);
+    }
+    
+    // 更新速度提示
+    if (result.type === 'hit') {
+      const textMap = { perfect: '准确', early: '抢拍', late: '拖拍' };
+      const colorMap = { perfect: '#42b883', early: '#f39c12', late: '#f39c12' };
+      tempoFeedback.value = textMap[result.timing];
+      feedbackColor.value = colorMap[result.timing];
+      
+      // 1.5秒后重置
+      setTimeout(() => {
+        tempoFeedback.value = '--';
+        feedbackColor.value = '#888';
+      }, 1500);
+    } else {
+        // Miss logic?
+    }
+  });
+  
   applySettings(); // 应用初始设置
 };
 
@@ -429,6 +470,25 @@ const demoFile = 'https://www.alphatab.net/files/canon.gp';
           <button @click="togglePlayback" :class="{ active: isPlaying }">
             {{ isPlaying ? '⏸ 暂停' : '▶ 播放' }}
           </button>
+        </div>
+
+        <!-- 练习模式 -->
+        <div class="tool-group">
+          <button 
+            @click="togglePractice" 
+            class="tool-btn" 
+            :class="{ active: isPracticeMode }"
+            title="开启智能练习模式"
+          >
+            {{ isPracticeMode ? '🎯 练习中' : '🎯 练习' }}
+          </button>
+          
+          <div class="monitor" v-if="isPracticeMode">
+             <div class="monitor-item">
+               <span class="label">评价</span>
+               <span class="value" :style="{ color: feedbackColor }">{{ tempoFeedback }}</span>
+             </div>
+          </div>
         </div>
 
         <!-- 谱面类型 -->

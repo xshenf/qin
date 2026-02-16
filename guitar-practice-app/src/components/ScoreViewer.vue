@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import * as alphaTab from '@coderline/alphatab';
+import PracticeEngine from '../engine/PracticeEngine';
 
 const scoreContainer = ref(null);
 let api = null;
@@ -62,20 +63,49 @@ const initAlphaTab = () => {
 
   api.playedBeatChanged.on((beat) => {
     emit('playedBeatChanged', beat);
+    
+    // Push notes to PracticeEngine
+    if (beat && beat.notes) {
+      const notes = beat.notes.map(n => ({
+        id: n.id,
+        fret: n.value, 
+        string: n.string,
+        startTick: beat.start,
+        duration: beat.duration,
+        ref: n // Keep reference to AlphaTab note object
+      }));
+      PracticeEngine.updateExpectedNotes(notes);
+    }
   });
 
-  api.activeBeatsChanged.on((args) => {
-    emit('activeBeatsChanged', args);
-  });
+  // ... (other events)
+};
 
-  api.playerPositionChanged.on((args) => {
-    emit('playerPositionChanged', args);
-  });
+// ...
 
-  // Load file if URL provided
-  if (props.fileUrl) {
-    console.log('Loading score from:', props.fileUrl);
-    api.load(props.fileUrl);
+// Marker logic
+const markers = ref([]); // Array of { style, class }
+
+const markNote = (note, status) => {
+  if (!api || !note) return;
+  // AlphaTab 1.3+ has boundsLookup. 
+  // note is the AlphaTab model object.
+  try {
+    const bounds = api.renderer.boundsLookup.getNoteBounds(note);
+    if (bounds) {
+       // bounds: x, y, w, h
+       markers.value.push({
+         style: {
+           left: bounds.x + 'px',
+           top: bounds.y + 'px',
+           width: bounds.w + 'px',
+           height: bounds.h + 'px'
+         },
+         class: status === 'hit' ? 'marker-hit' : 'marker-miss'
+       });
+    }
+  } catch (e) {
+    console.error("Error marking note:", e);
   }
 };
 
@@ -83,24 +113,12 @@ onMounted(() => {
   initAlphaTab();
 });
 
-onUnmounted(() => {
-  if (api) {
-    api.destroy();
-  }
-});
-
-// Watch for fileUrl changes
-watch(() => props.fileUrl, (newVal) => {
-  if (api && newVal) {
-    api.load(newVal);
-  }
-});
+// ...
 
 // Expose methods
 const playPause = () => api?.playPause();
 const stop = () => api?.stop();
 const getApi = () => api;
-
 const loadFile = (file) => {
   if (!api) return;
   const reader = new FileReader();
@@ -112,17 +130,28 @@ const loadFile = (file) => {
   reader.readAsArrayBuffer(file);
 };
 
+// Expose methods
 defineExpose({
   playPause,
   stop,
   loadFile,
-  getApi
+  getApi,
+  markNote
 });
 </script>
 
 <template>
   <div class="score-wrapper">
     <div ref="scoreContainer" class="score-container"></div>
+    <!-- Markers Overlay -->
+    <div class="markers-overlay">
+      <div 
+        v-for="(marker, index) in markers" 
+        :key="index"
+        :class="marker.class"
+        :style="marker.style"
+      ></div>
+    </div>
   </div>
 </template>
 
@@ -134,12 +163,37 @@ defineExpose({
   overflow-y: auto;
   background: white;
   box-sizing: border-box;
+  position: relative; /* For markers overlay */
 }
 .score-container {
   min-height: 100%;
   width: 100%;
   box-sizing: border-box;
   overflow-x: hidden;
+}
+
+.markers-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.marker-hit {
+  position: absolute;
+  background: rgba(66, 184, 131, 0.4);
+  border: 1px solid #42b883;
+  border-radius: 4px;
+}
+
+.marker-miss {
+  position: absolute;
+  background: rgba(255, 69, 58, 0.4);
+  border: 1px solid #ff453a;
+  border-radius: 4px;
 }
 </style>
 
