@@ -164,22 +164,175 @@ class AudioEngine {
                 return null;
             }
 
+            const pitchInfo = this.getNoteDetail(frequency);
             return {
                 frequency: frequency, // Hz
-                note: this.frequencyToNoteName(frequency),
+                note: pitchInfo.note,
+                cents: pitchInfo.cents,
                 timestamp: this.audioContext.currentTime
             };
         }
         return null;
     }
 
-    // Helper: Convert frequency to note name (e.g., 440 -> A4)
-    frequencyToNoteName(frequency) {
+    // Helper: Convert frequency to note name and cents
+    getNoteDetail(frequency) {
         const noteStrings = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-        const pitch = Math.round(69 + 12 * Math.log2(frequency / 440));
-        const octave = Math.floor(pitch / 12) - 1;
-        const noteIndex = pitch % 12;
-        return noteStrings[noteIndex] + octave;
+        // MIDI Note = 69 + 12 * log2(f / 440)
+        const midiFloat = 69 + 12 * Math.log2(frequency / 440);
+        const midi = Math.round(midiFloat);
+        const deviation = midiFloat - midi;
+        const cents = Math.floor(deviation * 100);
+
+        const octave = Math.floor(midi / 12) - 1;
+        const noteIndex = midi % 12;
+        const noteName = noteStrings[noteIndex] + octave;
+
+        return {
+            note: noteName,
+            cents: cents,
+            midi: midi
+        };
+    }
+
+    /**
+     * Polyphonic Pitch Detection using Spectral Peak Analysis
+     * @returns {Array} Array of detected notes [{ note, frequency, cents, amplitude }]
+     */
+    getPolyphonicPitch() {
+        if (!this.isListening || !this.analyser) return [];
+
+        // 1. Get Frequency Data
+        const bufferLength = this.analyser.frequencyBinCount; // fftSize / 2
+        const dataArray = new Float32Array(bufferLength);
+        this.analyser.getFloatFrequencyData(dataArray);
+
+        // 2. Find Peaks (Simple Peak Picking)
+        // Threshold: -70dB (configurable, silence is usually -100dB)
+        const threshold = -55; // 提高阈值，过滤环境杂音
+        const peaks = [];
+        const sampleRate = this.sampleRate;
+        const fftSize = this.analyser.fftSize;
+        const binSize = sampleRate / fftSize;
+
+        // Skip very low frequencies (< 70Hz)
+        const startBin = Math.floor(70 / binSize);
+        // Skip very high frequencies (> 2000Hz, guitar range)
+        const endBin = Math.floor(2000 / binSize);
+
+        for (let i = startBin; i < endBin; i++) {
+            const val = dataArray[i];
+            if (val > threshold) {
+                // Check if it's a local maximum
+                if (dataArray[i - 1] < val && dataArray[i + 1] < val) {
+                    // Parabolic Interpolation for better accuracy
+                    const alpha = dataArray[i - 1];
+                    const beta = val;
+                    const gamma = dataArray[i + 1];
+
+                    const p = 0.5 * (alpha - gamma) / (alpha - 2 * beta + gamma);
+                    const interpolatedBin = i + p;
+
+                    peaks.push({
+                        bin: interpolatedBin,
+                        frequency: interpolatedBin * binSize,
+                        magnitude: val
+                    });
+                }
+            }
+        }
+
+        // 3. Sort by magnitude (loudest first)
+        peaks.sort((a, b) => b.magnitude - a.magnitude);
+
+        // 3.5 Relative Peak Filter: discard peaks more than 20dB below the loudest
+        if (peaks.length > 0) {
+            const loudest = peaks[0].magnitude;
+            const relativeThreshold = 20; // dB
+            const filtered = peaks.filter(p => (loudest - p.magnitude) < relativeThreshold);
+            peaks.length = 0;
+            peaks.push(...filtered);
+        }
+
+        // 4. Filter Harmonics
+        // If we find a peak P, likely its harmonics 2*P, 3*P are also peaks.
+        // We want to keep the fundamental (usually the lowest frequency for a given note, 
+        // but sometimes harmonics are louder).
+        // Strategy: Iterate sorted peaks. If a peak matches a harmonic of an already selected peak, discard it?
+        // Wait, if we play a chord (C3 + E3), E3 is NOT a harmonic of C3.
+        // But E3 might be a harmonic of a lower C2?
+        // Simple Harmonic Filter:
+        // Take loudest. Assume it's a note.
+        // Remove weaker peaks that are integer multiples of this frequency (with tolerance).
+
+        const detectedNotes = [];
+        const maxPolyphony = 4; // 最多识别4个基频
+
+        const isHarmonic = (f1, f2) => {
+            // Check if f2 is a multiple of f1
+            const ratio = f2 / f1;
+            const nearestInt = Math.round(ratio);
+            if (nearestInt < 2) return false; // Not a harmonic (or is fundamental)
+            // Tolerance: 2%
+            return Math.abs(ratio - nearestInt) < 0.03;
+        };
+
+        // We also need to handle "Octave errors". 
+        // Sometimes the 2nd harmonic is louder than fundamental.
+        // For now, simple greedy approach.
+
+        const finalizedPeaks = [];
+
+        // Iterative selection
+        while (peaks.length > 0 && finalizedPeaks.length < maxPolyphony) {
+            const currentPeak = peaks.shift(); // Loudest remaining
+
+            // Check if this peak is a harmonic of an already selected peak?
+            // Meaning: is currentPeak = k * existing?
+            // Since we sorted by loudness, the fundamental might be quieter than harmonic (e.g. on phone mic).
+            // But usually fundamental is significant.
+
+            // Let's just suppress *its* harmonics from the *remaining* list.
+            // And also check if it is a harmonic of an *already selected* peak.
+
+            let isArtifact = false;
+            for (const existing of finalizedPeaks) {
+                // Check if current is harmonic of existing (Existing is louder)
+                if (isHarmonic(existing.frequency, currentPeak.frequency)) {
+                    isArtifact = true;
+                    break;
+                }
+                // Check if existing is harmonic of current? (Current is quieter but lower freq?)
+                // No, current is typically higher freq if it's a harmonic.
+                // But if current is 100Hz and Existing is 200Hz.
+                // If 200Hz is harmonic of 100Hz, we should have picked 100Hz?
+                // But 200Hz was louder.
+                // This is the "Missing Fundamental" problem.
+                // For now, accept the louder one.
+            }
+
+            if (!isArtifact) {
+                finalizedPeaks.push(currentPeak);
+
+                // Remove harmonics of *this* peak from candidates to avoid double counting
+                // (e.g. if we picked 110Hz, remove 220Hz, 330Hz from potential list)
+                for (let i = peaks.length - 1; i >= 0; i--) {
+                    if (isHarmonic(currentPeak.frequency, peaks[i].frequency)) {
+                        peaks.splice(i, 1);
+                    }
+                }
+            }
+        }
+
+        // 5. Convert to Notes
+        return finalizedPeaks.map(p => {
+            const details = this.getNoteDetail(p.frequency);
+            return {
+                frequency: p.frequency,
+                magnitude: p.magnitude,
+                ...details
+            };
+        });
     }
 }
 

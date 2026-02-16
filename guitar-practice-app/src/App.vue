@@ -4,6 +4,7 @@ import ScoreViewer from './components/ScoreViewer.vue';
 import Tuner from './components/Tuner.vue';
 import AudioEngine from './audio/AudioEngine';
 import PracticeEngine from './engine/PracticeEngine';
+import PerformanceBar from './components/PerformanceBar.vue';
 // import defaultScoreWithUrl from './assets/gtp/Canon_D.gp5?url'; 
 
 const scoreViewer = ref(null);
@@ -11,6 +12,7 @@ const isMicActive = ref(false);
 const detectedPitch = ref('--');
 const detectedNote = ref('--');
 const detectedFrequency = ref(null);
+const detectedPitchObj = ref(null); // For PerformanceBar
 const isPlaying = ref(false);
 
 // 调音器状态
@@ -50,9 +52,16 @@ const togglePractice = () => {
   isPracticeMode.value = !isPracticeMode.value;
   if (isPracticeMode.value) {
     if (!isMicActive.value) toggleMic(); // 自动开启麦克风
+    
+    // Connect pitch callback for PerformanceBar
+    PracticeEngine.setPitchCallback((data) => {
+        detectedPitchObj.value = data;
+    });
+    
     PracticeEngine.start();
   } else {
     PracticeEngine.stop();
+    detectedPitchObj.value = null; // Clear bar
     tempoFeedback.value = '--';
   }
 };
@@ -605,6 +614,8 @@ console.log("Default Score URL:", demoFile);
         </div>
       </div>
     </header>
+
+    <PerformanceBar v-if="isPracticeMode" :detectedPitch="detectedPitchObj" />
 
     <main :class="'layout-' + layoutWidth">
       <ScoreViewer 
