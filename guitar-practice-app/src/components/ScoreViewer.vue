@@ -74,6 +74,7 @@ const initAlphaTab = () => {
 
   api.playerReady.on(() => {
     console.log('Player ready');
+    PracticeEngine.attachScore(api); // 连接乐谱API到练习引擎
     emit('playerReady', api);
   });
 
