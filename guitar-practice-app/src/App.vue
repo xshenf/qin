@@ -79,6 +79,9 @@ const applySettings = () => {
   api.settings.display.staveProfile = staveProfileMap[staveProfile.value] || 0;
   api.settings.display.scale = zoom.value / 100;
   api.playbackSpeed = playbackSpeed.value / 100;
+  
+  // 始终使用 Page 模式（垂直分页），宽度通过 CSS 控制
+  api.settings.display.layoutMode = 0; // Page
 
   // 更新设置并重新渲染
   api.updateSettings();
@@ -91,6 +94,7 @@ const applySettings = () => {
 const onStaveProfileChange = () => applySettings();
 const onZoomChange = () => applySettings();
 const onSpeedChange = () => applySettings();
+const onWidthChange = () => applySettings();
 
 const demoFile = 'https://www.alphatab.net/files/canon.gp'; 
 </script>
@@ -156,7 +160,7 @@ const demoFile = 'https://www.alphatab.net/files/canon.gp';
         <!-- 宽度模式 -->
         <div class="tool-group">
           <label class="control-label">宽度</label>
-          <select v-model="layoutWidth" class="compact-select">
+          <select v-model="layoutWidth" @change="onWidthChange" class="compact-select">
             <option value="fit">适应</option>
             <option value="full">撑满</option>
           </select>
@@ -192,9 +196,12 @@ const demoFile = 'https://www.alphatab.net/files/canon.gp';
   display: flex;
   flex-direction: column;
   height: 100vh;
+  width: 100%;
   padding: 0;
+  margin: 0;
   background: #1a1a2e;
   color: #e0e0e0;
+  overflow-x: hidden;
 }
 
 header {
@@ -206,6 +213,7 @@ header {
   box-shadow: 0 2px 10px rgba(0,0,0,0.4);
   z-index: 10;
   border-bottom: 1px solid #2a2a4a;
+  flex-shrink: 0;
 }
 
 .header-left h1 {
@@ -327,19 +335,36 @@ button.mic-btn.active {
 
 main {
   flex: 1;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
+  width: 100%;
 }
 
-/* 宽度模式 */
+/* 宽度模式 - 只控制 main 容器，AlphaTab 会自动适应 */
 main.layout-fit {
   max-width: 1200px;
   margin: 0 auto;
-  width: 100%;
+  padding: 0 20px;
+  box-sizing: border-box;
 }
 
 main.layout-full {
-  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* 强制移除撑满模式下的所有 margin 和 padding */
+main.layout-full :deep(*) {
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+main.layout-full :deep(.score-wrapper),
+main.layout-full :deep(.score-container) {
+  width: 100% !important;
+  max-width: 100% !important;
 }
 </style>
