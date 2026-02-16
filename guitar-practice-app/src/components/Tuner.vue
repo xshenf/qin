@@ -21,9 +21,12 @@
       </div>
 
       <!-- 当前检测 -->
-      <div class="detected-pitch">
+      <div class="detected-pitch" :class="{ accurate: detectedNote && detectedNote !== '--' && Math.abs(cents) <= 5 }">
         <div class="pitch-note">{{ detectedNote || '--' }}</div>
         <div class="pitch-freq">{{ detectedFrequency || '--' }}</div>
+        <div v-if="detectedNote && detectedNote !== '--' && Math.abs(cents) <= 5" class="accurate-badge">
+          ✓ 音准准确
+        </div>
       </div>
 
       <!-- 音准指示器 */
@@ -78,10 +81,8 @@ const detectedFrequency = computed(() => {
 
 const isNearNote = (note) => {
   if (!props.detectedNote) return false;
-  // 移除数字后缀进行比较
-  const detectedBase = props.detectedNote.replace(/[0-9]/g, '');
-  const targetBase = note.replace(/[0-9]/g, '');
-  return detectedBase === targetBase;
+  // 精确匹配完整音符（包括八度）
+  return props.detectedNote === note;
 };
 
 // 计算音分偏差 (cents)
@@ -209,19 +210,67 @@ const needleClass = computed(() => {
   padding: 15px;
   background: rgba(0, 0, 0, 0.3);
   border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.detected-pitch.accurate {
+  background: rgba(66, 184, 131, 0.2);
+  border: 3px solid #42b883;
+  box-shadow: 0 0 20px rgba(66, 184, 131, 0.5);
+  animation: accurate-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes accurate-pulse {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(66, 184, 131, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(66, 184, 131, 0.8);
+  }
 }
 
 .pitch-note {
   font-size: 3rem;
   font-weight: bold;
-  color: #42b883;
+  color: #e0e0e0;
   font-family: monospace;
+  transition: all 0.3s ease;
+}
+
+.detected-pitch.accurate .pitch-note {
+  color: #42b883;
+  text-shadow: 0 0 10px rgba(66, 184, 131, 0.8);
+  transform: scale(1.1);
 }
 
 .pitch-freq {
   font-size: 1rem;
   color: #888;
   margin-top: 5px;
+}
+
+.accurate-badge {
+  margin-top: 10px;
+  padding: 8px 16px;
+  background: #42b883;
+  color: white;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 1rem;
+  display: inline-block;
+  animation: badge-bounce 0.5s ease-out;
+}
+
+@keyframes badge-bounce {
+  0% {
+    transform: scale(0);
+  }
+  50% {
+    transform: scale(1.1);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .tuner-indicator {
