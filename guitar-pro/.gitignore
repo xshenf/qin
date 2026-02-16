@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 *.pyc
+__pycache__/
+
+# AlphaTab 本地资源（通过 scripts/download_alphatab.py 下载）
+src/ui/vendor/
+*.egg-info

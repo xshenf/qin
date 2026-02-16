@@ -10,10 +10,10 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QComboBox, QStatusBar,
     QProgressBar, QGroupBox, QSplitter, QFrame,
-    QFileDialog, QSlider
+    QFileDialog, QSlider, QSpinBox, QMenuBar, QMenu
 )
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QFont, QColor
+from PySide6.QtGui import QFont, QColor, QAction, QKeySequence
 import pyqtgraph as pg
 
 from src.audio.audio_io import AudioIO
@@ -235,6 +235,7 @@ class MainWindow(QMainWindow):
         self.audio = AudioIO(sample_rate=44100, block_size=256)
 
         # 构建 UI
+        self._build_menubar()
         self._build_ui()
 
         # 定时器：30fps 刷新 UI
@@ -242,70 +243,236 @@ class MainWindow(QMainWindow):
         self.ui_timer.timeout.connect(self._update_ui)
         self.ui_timer.setInterval(33)  # ~30fps
 
+    def _build_menubar(self):
+        """构建菜单栏"""
+        menubar = self.menuBar()
+        menubar.setStyleSheet("""
+            QMenuBar {
+                background: #0f0f23;
+                color: #cdd6f4;
+                padding: 2px 0;
+                font-size: 13px;
+            }
+            QMenuBar::item {
+                padding: 4px 12px;
+                border-radius: 4px;
+            }
+            QMenuBar::item:selected {
+                background: #313244;
+            }
+            QMenu {
+                background: #1e1e2e;
+                color: #cdd6f4;
+                border: 1px solid #313244;
+                padding: 4px 0;
+            }
+            QMenu::item {
+                padding: 6px 30px 6px 20px;
+            }
+            QMenu::item:selected {
+                background: #313244;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #313244;
+                margin: 4px 8px;
+            }
+        """)
+
+        # ---- 文件菜单 ----
+        file_menu = menubar.addMenu("文件(&F)")
+
+        self.action_open = QAction("📂 打开乐谱...", self)
+        self.action_open.setShortcut(QKeySequence.StandardKey.Open)
+        self.action_open.triggered.connect(self._open_score_file)
+        file_menu.addAction(self.action_open)
+
+        file_menu.addSeparator()
+
+        action_quit = QAction("退出(&Q)", self)
+        action_quit.setShortcut(QKeySequence("Ctrl+Q"))
+        action_quit.triggered.connect(self.close)
+        file_menu.addAction(action_quit)
+
+        # ---- 视图菜单 ----
+        view_menu = menubar.addMenu("视图(&V)")
+
+        # 谱面模式子菜单
+        stave_menu = view_menu.addMenu("谱面模式")
+        self.action_tab = QAction("六线谱", self, checkable=True, checked=True)
+        self.action_tab.triggered.connect(lambda: self._set_stave("Tab"))
+        stave_menu.addAction(self.action_tab)
+
+        self.action_score = QAction("五线谱", self, checkable=True)
+        self.action_score.triggered.connect(lambda: self._set_stave("Score"))
+        stave_menu.addAction(self.action_score)
+
+        self.action_score_tab = QAction("五线+六线", self, checkable=True)
+        self.action_score_tab.triggered.connect(lambda: self._set_stave("ScoreTab"))
+        stave_menu.addAction(self.action_score_tab)
+
+        # 布局模式子菜单
+        layout_menu = view_menu.addMenu("布局模式")
+        self.action_page_layout = QAction("📄 页面视图", self, checkable=True, checked=True)
+        self.action_page_layout.triggered.connect(lambda: self._set_layout("Page"))
+        layout_menu.addAction(self.action_page_layout)
+
+        self.action_horizontal_layout = QAction("↔ 水平滚动", self, checkable=True)
+        self.action_horizontal_layout.triggered.connect(lambda: self._set_layout("Horizontal"))
+        layout_menu.addAction(self.action_horizontal_layout)
+
+        view_menu.addSeparator()
+
+        # 缩放
+        action_zoom_in = QAction("🔍 放大", self)
+        action_zoom_in.setShortcut(QKeySequence("Ctrl+="))
+        action_zoom_in.triggered.connect(self._zoom_in)
+        view_menu.addAction(action_zoom_in)
+
+        action_zoom_out = QAction("🔍 缩小", self)
+        action_zoom_out.setShortcut(QKeySequence("Ctrl+-"))
+        action_zoom_out.triggered.connect(self._zoom_out)
+        view_menu.addAction(action_zoom_out)
+
+        action_zoom_reset = QAction("🔍 重置缩放", self)
+        action_zoom_reset.setShortcut(QKeySequence("Ctrl+0"))
+        action_zoom_reset.triggered.connect(self._zoom_reset)
+        view_menu.addAction(action_zoom_reset)
+
+        # ---- 播放菜单 ----
+        play_menu = menubar.addMenu("播放(&P)")
+
+        self.action_play = QAction("▶ 播放/暂停", self)
+        self.action_play.setShortcut(QKeySequence("Space"))
+        self.action_play.triggered.connect(self._toggle_playback)
+        play_menu.addAction(self.action_play)
+
+        self.action_stop = QAction("⏹ 停止", self)
+        self.action_stop.triggered.connect(self._stop_playback)
+        play_menu.addAction(self.action_stop)
+
+        # ---- 音频菜单 ----
+        audio_menu = menubar.addMenu("音频(&A)")
+
+        # 设备选择子菜单
+        self.device_menu = audio_menu.addMenu("输入设备")
+        self._populate_device_menu()
+
+        audio_menu.addSeparator()
+
+        self.action_record = QAction("🎤 开始采集", self, checkable=True)
+        self.action_record.triggered.connect(self._toggle_recording)
+        audio_menu.addAction(self.action_record)
+
+        self.action_practice = QAction("🎸 练习模式", self, checkable=True)
+        self.action_practice.setEnabled(False)
+        audio_menu.addAction(self.action_practice)
+
     def _build_ui(self):
         """构建界面"""
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
-        main_layout.setSpacing(8)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(6)
+        main_layout.setContentsMargins(8, 4, 8, 8)
 
-        # === 顶部工具栏 ===
+        # === 精简工具栏 ===
         toolbar = QHBoxLayout()
+        toolbar.setSpacing(6)
 
-        # 打开文件按钮
-        self.btn_open = QPushButton("📂 打开乐谱")
+        # 打开文件
+        self.btn_open = QPushButton("📂 打开")
+        self.btn_open.setToolTip("打开乐谱文件 (Ctrl+O)")
         self.btn_open.clicked.connect(self._open_score_file)
         toolbar.addWidget(self.btn_open)
 
+        self._add_separator(toolbar)
+
         # 播放控制
-        self.btn_play = QPushButton("▶ 播放")
+        self.btn_play = QPushButton("▶")
+        self.btn_play.setToolTip("播放/暂停 (Space)")
+        self.btn_play.setFixedWidth(36)
         self.btn_play.clicked.connect(self._toggle_playback)
         toolbar.addWidget(self.btn_play)
 
-        self.btn_stop = QPushButton("⏹ 停止")
+        self.btn_stop = QPushButton("⏹")
+        self.btn_stop.setToolTip("停止")
+        self.btn_stop.setFixedWidth(36)
         self.btn_stop.clicked.connect(self._stop_playback)
         toolbar.addWidget(self.btn_stop)
 
-        # 速度滑块
+        # 速度
         toolbar.addWidget(QLabel("速度:"))
         self.speed_slider = QSlider(Qt.Orientation.Horizontal)
         self.speed_slider.setMinimum(25)
         self.speed_slider.setMaximum(200)
         self.speed_slider.setValue(100)
-        self.speed_slider.setFixedWidth(100)
+        self.speed_slider.setFixedWidth(90)
+        self.speed_slider.setToolTip("播放速度")
         self.speed_slider.valueChanged.connect(self._on_speed_changed)
         toolbar.addWidget(self.speed_slider)
         self.speed_label = QLabel("100%")
-        self.speed_label.setFixedWidth(40)
+        self.speed_label.setFixedWidth(36)
         toolbar.addWidget(self.speed_label)
 
-        # 谱面模式
-        self.stave_combo = QComboBox()
-        self.stave_combo.addItem("六线谱", "Tab")
-        self.stave_combo.addItem("五线谱", "Score")
-        self.stave_combo.addItem("五线+六线", "ScoreTab")
-        self.stave_combo.currentIndexChanged.connect(self._on_stave_changed)
-        toolbar.addWidget(self.stave_combo)
+        self._add_separator(toolbar)
+
+        # 缩放（紧凑按钮）
+        self.btn_zoom_out = QPushButton("−")
+        self.btn_zoom_out.setFixedWidth(28)
+        self.btn_zoom_out.setToolTip("缩小 (Ctrl+-)")
+        self.btn_zoom_out.clicked.connect(self._zoom_out)
+        toolbar.addWidget(self.btn_zoom_out)
+
+        self.zoom_label = QLabel("100%")
+        self.zoom_label.setFixedWidth(40)
+        self.zoom_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        toolbar.addWidget(self.zoom_label)
+
+        self.btn_zoom_in = QPushButton("+")
+        self.btn_zoom_in.setFixedWidth(28)
+        self.btn_zoom_in.setToolTip("放大 (Ctrl+=)")
+        self.btn_zoom_in.clicked.connect(self._zoom_in)
+        toolbar.addWidget(self.btn_zoom_in)
+
+        self._add_separator(toolbar)
+
+        # 小节跳转
+        toolbar.addWidget(QLabel("小节:"))
+        self.bar_spinbox = QSpinBox()
+        self.bar_spinbox.setMinimum(1)
+        self.bar_spinbox.setMaximum(1)
+        self.bar_spinbox.setFixedWidth(65)
+        self.bar_spinbox.setStyleSheet("""
+            QSpinBox {
+                background: #16213e;
+                color: #e0e0e0;
+                border: 1px solid #0f3460;
+                border-radius: 3px;
+                padding: 2px 4px;
+            }
+        """)
+        toolbar.addWidget(self.bar_spinbox)
+
+        self.btn_go_bar = QPushButton("Go")
+        self.btn_go_bar.setFixedWidth(36)
+        self.btn_go_bar.setToolTip("跳转到指定小节")
+        self.btn_go_bar.clicked.connect(self._go_to_bar)
+        toolbar.addWidget(self.btn_go_bar)
 
         toolbar.addStretch()
 
-        # 设备选择
-        toolbar.addWidget(QLabel("音频设备:"))
-        self.device_combo = QComboBox()
-        self._populate_devices()
-        toolbar.addWidget(self.device_combo)
-
-        # 录音按钮
-        self.btn_record = QPushButton("🎤 开始采集")
+        # 采集 / 练习
+        self.btn_record = QPushButton("🎤 采集")
         self.btn_record.setCheckable(True)
+        self.btn_record.setToolTip("开始/停止音频采集")
         self.btn_record.clicked.connect(self._toggle_recording)
         toolbar.addWidget(self.btn_record)
 
-        # 练习按钮
-        self.btn_practice = QPushButton("🎸 练习模式")
+        self.btn_practice = QPushButton("🎸 练习")
         self.btn_practice.setCheckable(True)
-        self.btn_practice.setEnabled(False)  # 先开启采集才能练习
+        self.btn_practice.setEnabled(False)
+        self.btn_practice.setToolTip("练习模式（需先开启采集）")
         toolbar.addWidget(self.btn_practice)
 
         main_layout.addLayout(toolbar)
@@ -319,6 +486,9 @@ class MainWindow(QMainWindow):
         self.score_view.beatChanged.connect(self._on_beat_changed)
         self.score_view.positionChanged.connect(self._on_position_changed)
         self.score_view.playerFinished.connect(self._on_player_finished)
+        self.score_view.renderProgress.connect(self._on_render_progress)
+        self.score_view.errorOccurred.connect(self._on_error)
+        self.score_view.zoomChanged.connect(self._on_zoom_changed)
         splitter.addWidget(self.score_view)
 
         # 下半部：音频分析区域
@@ -362,27 +532,59 @@ class MainWindow(QMainWindow):
         # === 状态栏 ===
         self.statusBar().showMessage("就绪 — 点击 🎤 开始采集 开始")
 
-    def _populate_devices(self):
-        """填充音频设备列表"""
+    @staticmethod
+    def _add_separator(layout: QHBoxLayout):
+        """添加工具栏分隔线"""
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.VLine)
+        sep.setFixedHeight(20)
+        sep.setStyleSheet("color: #333;")
+        layout.addWidget(sep)
+
+    def _populate_device_menu(self):
+        """填充音频设备菜单"""
         import sounddevice as sd
         devices = sd.query_devices()
-        self.device_combo.clear()
-        self.device_combo.addItem("默认设备", None)
+        self.device_menu.clear()
+
+        # 默认设备
+        action_default = QAction("默认设备", self, checkable=True, checked=True)
+        action_default.setData(None)
+        action_default.triggered.connect(lambda: self._select_device(None))
+        self.device_menu.addAction(action_default)
+        self._device_actions = [action_default]
+
+        self.device_menu.addSeparator()
+
         for i, dev in enumerate(devices):
             if dev['max_input_channels'] > 0:
                 name = f"[{i}] {dev['name']} ({dev['max_input_channels']}ch)"
-                self.device_combo.addItem(name, i)
+                action = QAction(name, self, checkable=True)
+                action.setData(i)
+                action.triggered.connect(lambda checked, idx=i: self._select_device(idx))
+                self.device_menu.addAction(action)
+                self._device_actions.append(action)
+
+    def _select_device(self, device_index):
+        """选择音频设备"""
+        # 取消所有选中
+        for action in self._device_actions:
+            action.setChecked(action.data() == device_index)
+        self.audio.device = device_index
+        name = '默认设备' if device_index is None else f'设备 {device_index}'
+        self.statusBar().showMessage(f"已选择: {name}")
 
     def _toggle_recording(self, checked):
         """切换音频采集"""
         if checked:
-            # 获取选择的设备
-            device = self.device_combo.currentData()
-            self.audio.device = device
+            # 设备已在菜单中选择
+            pass
             try:
                 self.audio.start()
-                self.btn_record.setText("⏹ 停止采集")
+                self.btn_record.setText("⏹ 停止")
                 self.btn_practice.setEnabled(True)
+                self.action_record.setText("⏹ 停止采集")
+                self.action_practice.setEnabled(True)
                 self.ui_timer.start()
                 self.statusBar().showMessage(
                     f"采集中 — SR: {self.audio.sample_rate}Hz, "
@@ -395,8 +597,10 @@ class MainWindow(QMainWindow):
         else:
             self.audio.stop()
             self.ui_timer.stop()
-            self.btn_record.setText("🎤 开始采集")
+            self.btn_record.setText("🎤 采集")
+            self.action_record.setText("🎤 开始采集")
             self.btn_practice.setEnabled(False)
+            self.action_practice.setEnabled(False)
             self.pitch_display.clear_pitch()
             self.statusBar().showMessage("已停止")
 
@@ -491,19 +695,54 @@ class MainWindow(QMainWindow):
         self.speed_label.setText(f"{value}%")
         self.score_view.set_speed(speed)
 
-    def _on_stave_changed(self, index):
+    def _set_stave(self, profile: str):
         """谱面模式切换"""
-        profile = self.stave_combo.currentData()
-        if profile:
-            self.score_view.set_stave_profile(profile)
+        self.score_view.set_stave_profile(profile)
+        # 更新菜单勾选
+        self.action_tab.setChecked(profile == "Tab")
+        self.action_score.setChecked(profile == "Score")
+        self.action_score_tab.setChecked(profile == "ScoreTab")
+
+    def _set_layout(self, mode: str):
+        """布局模式切换"""
+        self.score_view.set_layout_mode(mode)
+        # 更新菜单勾选
+        self.action_page_layout.setChecked(mode == "Page")
+        self.action_horizontal_layout.setChecked(mode == "Horizontal")
+
+    def _zoom_in(self):
+        """放大"""
+        self.score_view.zoom_in()
+
+    def _zoom_out(self):
+        """缩小"""
+        self.score_view.zoom_out()
+
+    def _zoom_reset(self):
+        """重置缩放"""
+        self.score_view.zoom_reset()
+
+    def _on_zoom_changed(self, zoom: float):
+        """缩放变化回调"""
+        self.zoom_label.setText(f"{int(zoom * 100)}%")
+
+    def _go_to_bar(self):
+        """跳转到指定小节"""
+        bar = self.bar_spinbox.value()
+        self.score_view.go_to_bar(bar)
 
     def _on_score_loaded(self, info: dict):
         """乐谱加载完成"""
         title = info.get('title', '未命名')
         artist = info.get('artist', '')
         tempo = info.get('tempo', '?')
+        bars = info.get('bars', 0)
         self.setWindowTitle(f"Guitar Pro — {title} - {artist}")
-        self.statusBar().showMessage(f"已加载: {title} | {artist} | ♩={tempo}")
+        self.statusBar().showMessage(f"已加载: {title} | {artist} | ♩={tempo} | {bars}小节")
+
+        # 更新小节跳转范围
+        if bars > 0:
+            self.bar_spinbox.setMaximum(bars)
 
     def _on_beat_changed(self, data: dict):
         """当前拍子变化（练习模式用）"""
@@ -522,6 +761,17 @@ class MainWindow(QMainWindow):
     def _on_player_finished(self):
         """播放完成"""
         self.statusBar().showMessage("播放完成")
+
+    def _on_render_progress(self, progress: int):
+        """渲染进度回调"""
+        if progress < 100:
+            self.statusBar().showMessage(f"渲染中... {progress}%")
+        else:
+            self.statusBar().showMessage("渲染完成")
+
+    def _on_error(self, message: str):
+        """错误回调"""
+        self.statusBar().showMessage(f"⚠️ {message}")
 
     def closeEvent(self, event):
         """窗口关闭时清理资源"""
