@@ -546,9 +546,11 @@ const demoFile = 'https://www.alphatab.net/files/canon.gp';
 
     <main :class="'layout-' + layoutWidth">
       <ScoreViewer 
+        v-if="demoFile"
         ref="scoreViewer" 
         :file-url="demoFile"
         @playerReady="handleScoreReady"
+        @playerFinished="isPlaying = false"
       />
     </main>
 
