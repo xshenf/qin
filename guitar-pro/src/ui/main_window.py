@@ -202,7 +202,7 @@ class MainWindow(QMainWindow):
                 color: #e0e0e0;
                 border: 1px solid #0f3460;
                 border-radius: 5px;
-                padding: 8px 16px;
+                padding: 6px 12px;
                 font-size: 13px;
             }
             QPushButton:hover {
@@ -389,15 +389,19 @@ class MainWindow(QMainWindow):
         self._add_separator(toolbar)
 
         # 播放控制
+        _icon_btn_style = "font-size: 18px; font-weight: bold;"
+
         self.btn_play = QPushButton("▶")
         self.btn_play.setToolTip("播放/暂停 (Space)")
-        self.btn_play.setFixedWidth(36)
+        self.btn_play.setFixedSize(40, 32)
+        self.btn_play.setStyleSheet(_icon_btn_style)
         self.btn_play.clicked.connect(self._toggle_playback)
         toolbar.addWidget(self.btn_play)
 
-        self.btn_stop = QPushButton("⏹")
+        self.btn_stop = QPushButton("■")
         self.btn_stop.setToolTip("停止")
-        self.btn_stop.setFixedWidth(36)
+        self.btn_stop.setFixedSize(40, 32)
+        self.btn_stop.setStyleSheet(_icon_btn_style)
         self.btn_stop.clicked.connect(self._stop_playback)
         toolbar.addWidget(self.btn_stop)
 
@@ -417,9 +421,12 @@ class MainWindow(QMainWindow):
 
         self._add_separator(toolbar)
 
-        # 缩放（紧凑按钮）
+        # 缩放
+        _zoom_btn_style = "font-size: 16px; font-weight: bold;"
+
         self.btn_zoom_out = QPushButton("−")
-        self.btn_zoom_out.setFixedWidth(28)
+        self.btn_zoom_out.setFixedSize(32, 32)
+        self.btn_zoom_out.setStyleSheet(_zoom_btn_style)
         self.btn_zoom_out.setToolTip("缩小 (Ctrl+-)")
         self.btn_zoom_out.clicked.connect(self._zoom_out)
         toolbar.addWidget(self.btn_zoom_out)
@@ -430,7 +437,8 @@ class MainWindow(QMainWindow):
         toolbar.addWidget(self.zoom_label)
 
         self.btn_zoom_in = QPushButton("+")
-        self.btn_zoom_in.setFixedWidth(28)
+        self.btn_zoom_in.setFixedSize(32, 32)
+        self.btn_zoom_in.setStyleSheet(_zoom_btn_style)
         self.btn_zoom_in.setToolTip("放大 (Ctrl+=)")
         self.btn_zoom_in.clicked.connect(self._zoom_in)
         toolbar.addWidget(self.btn_zoom_in)
