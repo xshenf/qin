@@ -12,8 +12,8 @@ class PracticeEngine {
         // 音符稳定器：过滤瞬态噪声和泛音伪影
         this.noteStabilizer = new Map(); // noteName -> { count, lastFrame, data }
         this.frameCounter = 0;
-        this.STABILITY_THRESHOLD = 10; // 需要连续出现10帧才算稳定 (~170ms at 60fps)
-        this.DECAY_FRAMES = 10; // 消失10帧后移除 (~170ms)
+        this.STABILITY_THRESHOLD = 2; // 2帧确认即显示 (~33ms at 60fps)
+        this.DECAY_FRAMES = 4; // 消失4帧后移除 (~66ms)
         this.MAX_DISPLAY_NOTES = 3; // 最多同时显示3个音符
     }
 
@@ -24,9 +24,10 @@ class PracticeEngine {
 
     // Start practice loop
     start() {
-        if (!this.scoreApi) return;
         this.isPracticeRunning = true;
         this.noteStatus.clear(); // Clear previous session status
+        this.noteStabilizer.clear(); // Clear stabilizer
+        this.frameCounter = 0;
         this.loop();
     }
 
@@ -42,38 +43,27 @@ class PracticeEngine {
         if (!this.isPracticeRunning) return;
 
         try {
-            // 1a. Get mono pitch (YIN, for accurate note matching)
+            // YIN 算法：准确找基频（用于乐谱匹配）
             const pitchData = AudioEngine.getPitch();
 
-            // 1b. Get polyphonic pitch (FFT, for UI display)
+            // FFT 多音检测：用于 UI 显示（允许泛音）
             const polyPitchData = AudioEngine.getPolyphonicPitch();
 
-            // Notify UI about real-time pitch (for PerformanceBar)
+            // 通知 UI (PerformanceBar)
             if (this.onPitchUpdate) {
-                // Merge: if poly has data, use it; otherwise fall back to mono
-                let rawNotes = [];
-                if (polyPitchData.length > 0) {
-                    rawNotes = polyPitchData;
-                } else if (pitchData) {
-                    rawNotes = [pitchData];
-                }
-
-                // 稳定化处理
+                // 轻量稳定化：2帧确认，过滤单帧毛刺
                 this.frameCounter++;
-                const currentNoteNames = new Set();
+                let rawNotes = polyPitchData.length > 0 ? polyPitchData : (pitchData ? [pitchData] : []);
 
                 for (const note of rawNotes) {
-                    currentNoteNames.add(note.note);
                     const existing = this.noteStabilizer.get(note.note);
                     if (existing) {
                         existing.count++;
                         existing.lastFrame = this.frameCounter;
-                        existing.data = note; // 更新最新数据
+                        existing.data = note;
                     } else {
                         this.noteStabilizer.set(note.note, {
-                            count: 1,
-                            lastFrame: this.frameCounter,
-                            data: note
+                            count: 1, lastFrame: this.frameCounter, data: note
                         });
                     }
                 }
@@ -85,73 +75,71 @@ class PracticeEngine {
                     }
                 }
 
-                // 只输出稳定的音符
+                // 输出稳定音符（2帧即显示）
                 const stableNotes = [];
-                for (const [name, info] of this.noteStabilizer) {
+                for (const [, info] of this.noteStabilizer) {
                     if (info.count >= this.STABILITY_THRESHOLD) {
                         stableNotes.push(info.data);
                     }
                 }
-
-                // Sort by magnitude (loudest first)
                 stableNotes.sort((a, b) => (b.magnitude || 0) - (a.magnitude || 0));
-
                 this.onPitchUpdate(stableNotes.slice(0, this.MAX_DISPLAY_NOTES));
             }
 
-            // 2. Get current cursor position in ticks
-            const currentTick = this.scoreApi.tickPosition;
+            // 2. Get current cursor position in ticks (only if score is loaded)
+            if (this.scoreApi) {
+                const currentTick = this.scoreApi.tickPosition;
 
-            // 3. Find expected notes around this time
-            // AlphaTab doesn't expose a simple "getNoteAtTick" for performance, 
-            // we usually rely on 'playedBeatChanged' or pre-processing. 
-            // For now, let's assume we have access to active notes via API or we scan.
-            // A better approach for real-time is checking if any note is "active" (within duration)
+                // 3. Find expected notes around this time
+                // AlphaTab doesn't expose a simple "getNoteAtTick" for performance, 
+                // we usually rely on 'playedBeatChanged' or pre-processing. 
+                // For now, let's assume we have access to active notes via API or we scan.
+                // A better approach for real-time is checking if any note is "active" (within duration)
 
-            // Simplified: Check if pitch matches any note in the currently highlighted beats
-            // This requires ScoreViewer to expose active notes or we access via scoreApi.
+                // Simplified: Check if pitch matches any note in the currently highlighted beats
+                // This requires ScoreViewer to expose active notes or we access via scoreApi.
 
-            // Since accessing AlphaTab model in real-time loop might be heavy, 
-            // we can let ScoreViewer push "active notes" to us, OR we access a cached map.
+                // Since accessing AlphaTab model in real-time loop might be heavy, 
+                // we can let ScoreViewer push "active notes" to us, OR we access a cached map.
 
-            // For prototype: we will let ScoreViewer handle the "what note is it" 
-            // and we just compare pitch here? No, PracticeEngine should drive logic.
+                // For prototype: we will let ScoreViewer handle the "what note is it" 
+                // and we just compare pitch here? No, PracticeEngine should drive logic.
 
-            // Let's rely on `this.expectedNotes` which we can update via events.
+                // Let's rely on `this.expectedNotes` which we can update via events.
 
-            if (pitchData && this.expectedNotes && this.expectedNotes.length > 0) {
-                const detectedFreq = pitchData.frequency;
+                if (pitchData && this.expectedNotes && this.expectedNotes.length > 0) {
+                    const detectedFreq = pitchData.frequency;
 
-                // Check against all expected notes (polyphony support in future)
-                for (const note of this.expectedNotes) {
-                    if (this.noteStatus.has(note.id)) continue; // Already processed
+                    // Check against all expected notes (polyphony support in future)
+                    for (const note of this.expectedNotes) {
+                        if (this.noteStatus.has(note.id)) continue; // Already processed
 
-                    let midi = note.midi;
-                    if (!midi) {
-                        const tuning = this.getTuning(note.string);
-                        if (tuning !== undefined && tuning !== null) {
-                            midi = tuning + note.fret;
+                        let midi = note.midi;
+                        if (!midi) {
+                            const tuning = this.getTuning(note.string);
+                            if (tuning !== undefined && tuning !== null) {
+                                midi = tuning + note.fret;
+                            }
+                        }
+
+                        if (!midi) continue;
+
+                        // Calculate Note Frequency
+                        // Freq = 440 * 2^((midi - 69) / 12)
+                        const expectedFreq = 440 * Math.pow(2, (midi - 69) / 12);
+
+                        // (Debug log removed - was causing severe performance degradation)
+
+                        // Tolerance: +/- 0.6 semitone (approx 3.5% freq difference)
+                        const diffRatio = detectedFreq / expectedFreq;
+                        // 0.6 semitone ratio is approx 1.035
+                        if (diffRatio > 0.965 && diffRatio < 1.035) {
+                            // HIT!
+                            this.handleNoteHit(note, currentTick);
                         }
                     }
-
-                    if (!midi) continue;
-
-                    // Calculate Note Frequency
-                    // Freq = 440 * 2^((midi - 69) / 12)
-                    const expectedFreq = 440 * Math.pow(2, (midi - 69) / 12);
-
-                    // Debug:
-                    console.log(`Checking Note: ${note.id} String:${note.string} Fret:${note.fret} CalcMidi:${midi} ExpFreq:${expectedFreq.toFixed(1)} DetFreq:${detectedFreq.toFixed(1)}`);
-
-                    // Tolerance: +/- 0.6 semitone (approx 3.5% freq difference)
-                    const diffRatio = detectedFreq / expectedFreq;
-                    // 0.6 semitone ratio is approx 1.035
-                    if (diffRatio > 0.965 && diffRatio < 1.035) {
-                        // HIT!
-                        this.handleNoteHit(note, currentTick);
-                    }
                 }
-            }
+            } // end if (this.scoreApi)
 
         } catch (e) {
             console.error('PracticeEngine loop error:', e);

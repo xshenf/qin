@@ -159,8 +159,7 @@ class AudioEngine {
             const maxFreq = 2000;
 
             if (frequency < minFreq || frequency > maxFreq) {
-                // 频率超出吉他范围，忽略（可能是检测错误或倍频）
-                console.log(`Ignored invalid frequency: ${frequency}Hz`);
+                // 频率超出吉他范围，忽略
                 return null;
             }
 
@@ -209,7 +208,7 @@ class AudioEngine {
 
         // 2. Find Peaks (Simple Peak Picking)
         // Threshold: -70dB (configurable, silence is usually -100dB)
-        const threshold = -55; // 提高阈值，过滤环境杂音
+        const threshold = -70; // 使用稳定器过滤噪声，此处保持灵敏
         const peaks = [];
         const sampleRate = this.sampleRate;
         const fftSize = this.analyser.fftSize;
