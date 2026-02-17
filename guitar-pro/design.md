@@ -63,16 +63,16 @@ State-of-the-art algorithms utilized:
 - [x] Waveform/Spectrum Viz
 - [x] AlphaTab Score Loading
 
-### Phase 2: MIR Alignment Implementation [NEXT]
-- [ ] **Pitch/Onset Worker**: Create background worker for heavy MIR tasks.
-- [ ] **Feature Extraction**: Implement real-time Chroma extraction.
-- [ ] **Alignment Logic**: Implement simplified Online DTW.
-- [ ] **Score Synthesis**: Generate reference chroma features from AlphaTab MIDI events.
+### Phase 2: MIR Alignment Implementation [DONE]
+- [x] **Pitch Detection**: Integrated `PitchTracker` (CREPE/BasicPitch ready).
+- [x] **Feature Extraction**: Real-time Chroma feature extraction implemented.
+- [x] **Alignment Logic**: Online DTW (OLTW) algorithm implemented.
+- [x] **Score Synthesis**: Extracting note events from AlphaTab to synthesize reference chroma.
 
-### Phase 3: Feedback UI
-- [ ] **Cursor Sync**: Drive AlphaTab cursor via Alignment Engine (not just timer).
-- [ ] **Note Coloring**: Real-time coloring of notes (Green/Red) in AlphaTab.
-- [ ] **Performance Report**: Post-practice accuracy graph.
+### Phase 3: Feedback UI [DONE]
+- [x] **Cursor Sync**: Real-time score cursor synchronization via `setCursorTime` bridge.
+- [x] **Note Coloring**: Dynamic note coloring (Green/Red) based on pitch accuracy.
+- [x] **Scoring Engine**: `PracticeSession` for real-time score and combo tracking.
 
 ## Proposed Changes
 ### `pyproject.toml`
