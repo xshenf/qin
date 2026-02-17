@@ -368,9 +368,11 @@
 
         function hideLoadingOverlay() {
             const overlay = document.getElementById('loading-overlay');
-            overlay.classList.add('hidden');
-            // 等动画结束后移除 DOM
-            setTimeout(() => overlay.remove(), 500);
+            if (overlay) {
+                overlay.classList.add('hidden');
+                // 等动画结束后移除 DOM
+                setTimeout(() => overlay.remove(), 500);
+            }
         }
 
         function showError(message) {
@@ -485,9 +487,9 @@
                     enableElementHighlighting: true,
                     soundFont: getResourcePath('soundfont'),
                     scrollElement: container,
-                    scrollMode: 'off', // 'off' 为翻页滚动，'continuous' 为平滑滚动
+                    scrollMode: 'continuous', // 'off' 为翻页滚动，'continuous' 为平滑滚动
                     scrollSpeed: 300,
-                    scrollOffsetY: -20, // 滚动时的垂直偏移（留出顶部空间）
+                    scrollOffsetY: -70, // 滚动时的垂直偏移（留出顶部空间）
                 },
                 display: {
                     staveProfile: 'Tab',       // 默认六线谱
@@ -604,6 +606,31 @@
 
             api.soundFontLoaded.on(() => {
                 setLoadingStatus('音色库加载完成', 95);
+            });
+            // 点击跳转播放位置
+            api.beatMouseDown.on((beat) => {
+                if (beat && api.player) {
+                    // 确保使用绝对 tick
+                    const tick = beat.absoluteStart !== undefined ? beat.absoluteStart : beat.start;
+
+                    // console.log(`Seek request: ${tick} (state=${api.player.state})`);
+
+                    // 如果正在播放，先暂停，跳转后再恢复，以确保位置同步准确
+                    const wasPlaying = api.player.state === 1;
+                    if (wasPlaying) {
+                        api.player.pause();
+                    }
+
+                    api.tickPosition = tick;
+                    api.player.tickPosition = tick;
+
+                    if (wasPlaying) {
+                        // 给一点缓冲时间让 synth 处理 seek
+                        setTimeout(() => {
+                            api.player.play();
+                        }, 50);
+                    }
+                }
             });
 
             // 引擎就绪后隐藏加载层

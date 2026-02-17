@@ -760,8 +760,12 @@ class MainWindow(QMainWindow):
     def _on_position_changed(self, data: dict):
         """播放位置变化"""
         # 更新状态栏时间
-        current = data.get('currentTime', 0)
-        end = data.get('endTime', 0)
+        current = data.get('currentTime')
+        end = data.get('endTime')
+        
+        if current is None or end is None:
+            return
+
         m1, s1 = divmod(int(current / 1000), 60)
         m2, s2 = divmod(int(end / 1000), 60)
         self.statusBar().showMessage(f"播放中: {m1}:{s1:02d} / {m2}:{s2:02d}")
