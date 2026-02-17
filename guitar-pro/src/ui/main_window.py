@@ -529,11 +529,26 @@ class MainWindow(QMainWindow):
         self.btn_practice.setCheckable(True)
         self.btn_practice.setEnabled(False)
         self.btn_practice.setToolTip("练习模式（需先开启采集）")
-        self.btn_practice.setCheckable(True)
-        self.btn_practice.setEnabled(False)
-        self.btn_practice.setToolTip("练习模式（需先开启采集）")
         self.btn_practice.clicked.connect(self._toggle_practice)
         toolbar.addWidget(self.btn_practice)
+
+        self._add_separator(toolbar)
+
+        # 片段录音/播放
+        self.btn_snippet_rec = QPushButton()
+        self.btn_snippet_rec.setIcon(get_icon("rec_off"))
+        self.btn_snippet_rec.setToolTip("录制一小段音频 (需先开启采集)")
+        self.btn_snippet_rec.setCheckable(True)
+        self.btn_snippet_rec.setEnabled(False)
+        self.btn_snippet_rec.clicked.connect(self._toggle_snippet_recording)
+        toolbar.addWidget(self.btn_snippet_rec)
+
+        self.btn_snippet_play = QPushButton()
+        self.btn_snippet_play.setIcon(get_icon("play"))
+        self.btn_snippet_play.setToolTip("播放录制的片段")
+        self.btn_snippet_play.setEnabled(False)
+        self.btn_snippet_play.clicked.connect(self._play_snippet)
+        toolbar.addWidget(self.btn_snippet_play)
 
         main_layout.addLayout(toolbar)
 
@@ -658,6 +673,7 @@ class MainWindow(QMainWindow):
                 self.audio.start()
                 self.btn_record.setText("⏹ 停止")
                 self.btn_practice.setEnabled(True)
+                self.btn_snippet_rec.setEnabled(True)
                 self.action_record.setText("⏹ 停止采集")
                 self.action_practice.setEnabled(True)
                 self.ui_timer.start()
@@ -676,6 +692,9 @@ class MainWindow(QMainWindow):
             self.action_record.setText("🎤 开始采集")
             self.btn_practice.setEnabled(False)
             self.action_practice.setEnabled(False)
+            self.btn_snippet_rec.setEnabled(False)
+            self.btn_snippet_rec.setChecked(False)
+            self.btn_snippet_rec.setIcon(get_icon("rec_off"))
             self.pitch_display.clear_pitch()
             self.statusBar().showMessage("已停止")
 
@@ -777,6 +796,28 @@ class MainWindow(QMainWindow):
                     # 可以在 statusBar 显示连击
                     if res['combo'] > 1 and res['combo'] % 5 == 0:
                         self.statusBar().showMessage(f"太棒了! {res['combo']} 连击!", 2000)
+
+    def _toggle_snippet_recording(self, checked):
+        """切换片段录音"""
+        if checked:
+            self.audio.start_snippet_recording()
+            self.btn_snippet_rec.setIcon(get_icon("rec_on"))
+            self.btn_snippet_play.setEnabled(False)
+            self.statusBar().showMessage("正在录制片段...")
+        else:
+            data = self.audio.stop_snippet_recording()
+            self.btn_snippet_rec.setIcon(get_icon("rec_off"))
+            if data is not None and len(data) > 0:
+                self.btn_snippet_play.setEnabled(True)
+                self.statusBar().showMessage(f"片段录制完成 ({len(data)/self.audio.sample_rate:.1f}s)")
+            else:
+                self.btn_snippet_play.setEnabled(False)
+                self.statusBar().showMessage("录制取消或无数据")
+
+    def _play_snippet(self):
+        """播放片段"""
+        self.audio.play_snippet()
+        self.statusBar().showMessage("正在播放录制片段...")
 
     def _update_pitch_display(self, freq: float, conf: float):
         """Update pitch display with frequency and calculate note info"""

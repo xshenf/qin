@@ -117,6 +117,11 @@ class AudioIO:
         self.total_frames = 0
         self.overflows = 0
 
+        # 片段录音
+        self.is_recording_snippet = False
+        self.snippet_buffer = []
+        self.recorded_data: Optional[np.ndarray] = None
+
     def _audio_callback(self, indata, frames, time_info, status):
         """PortAudio 音频回调（在音频线程中运行）"""
         if status:
@@ -131,6 +136,10 @@ class AudioIO:
         # 触发回调钩子
         if self.on_audio_block is not None:
             self.on_audio_block(audio)
+
+        # 片段录音逻辑
+        if self.is_recording_snippet:
+            self.snippet_buffer.append(audio.copy())
 
     def start(self):
         """启动音频采集"""
@@ -185,6 +194,33 @@ class AudioIO:
         if rms < 1e-10:
             return -100.0
         return 20 * np.log10(rms)
+
+    def start_snippet_recording(self):
+        """开始片段录制"""
+        self.snippet_buffer = []
+        self.recorded_data = None
+        self.is_recording_snippet = True
+        print("[AudioIO] 开始录制片段...")
+
+    def stop_snippet_recording(self) -> Optional[np.ndarray]:
+        """停止片段录制并返回数据"""
+        self.is_recording_snippet = False
+        if not self.snippet_buffer:
+            return None
+        
+        self.recorded_data = np.concatenate(self.snippet_buffer)
+        self.snippet_buffer = []
+        print(f"[AudioIO] 录制结束: {len(self.recorded_data) / self.sample_rate:.2f}s")
+        return self.recorded_data
+
+    def play_snippet(self):
+        """回放录制的片段"""
+        if self.recorded_data is None:
+            print("[AudioIO] 没有录制的片段可供回放")
+            return
+        
+        print("[AudioIO] 开始回放片段...")
+        sd.play(self.recorded_data, self.sample_rate)
 
     @staticmethod
     def list_devices():
