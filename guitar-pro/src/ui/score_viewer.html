@@ -519,7 +519,9 @@
                             (beat.notes || []).forEach(note => {
                                 if (note && note.string > 0 && note.string <= tuningLength) {
                                     const openStringMidi = tuning[note.string - 1];
-                                    events.push([startTime, durSeconds, openStringMidi + (note.fret || 0), note.id]);
+                                    // Add bar.index (or i) to event data for Bar Completion tracking
+                                    const barIdx = (bar.index !== undefined) ? bar.index : i;
+                                    events.push([startTime, durSeconds, openStringMidi + (note.fret || 0), note.id, barIdx]);
                                 }
                             });
                         } catch (e) { }

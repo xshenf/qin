@@ -316,12 +316,26 @@ class ScoreFollower:
         
         return estimated_time, chroma
 
-    def check_chroma_hit(self, chroma: np.ndarray, target_pitch: int, threshold: float = 0.4) -> bool:
+    def check_chroma_hit(self, chroma: np.ndarray, target_pitch: int, threshold: float = 0.6) -> bool:
         """
         Check if the target pitch is present in the chroma vector (Spectral Energy Check).
-        Wrapper for Energy-based Scoring.
+        STRICTER VERSION:
+        1. Checks if chroma has enough variance (rejects flat noise).
+        2. Checks if target bin is significant.
         """
         if chroma is None or len(chroma) != 12:
+            return False
+            
+        # 1. Reject noise (flat spectrum or silence)
+        # If max value is too low, it's silence/background noise
+        if np.max(chroma) < 0.3:
+            return False
+            
+        # 2. Reject percussive/atonal sounds (Low Peakiness)
+        # A clear tone should have peaks. Flat chroma means noise.
+        mean_val = np.mean(chroma) + 1e-6
+        peakiness = np.max(chroma) / mean_val
+        if peakiness < 2.5: # Heuristic: Uniform distribution gives ~1.0. Tonal needs > 2.5
             return False
             
         target_idx = target_pitch % 12
@@ -331,9 +345,11 @@ class ScoreFollower:
         left = chroma[(target_idx - 1) % 12]
         right = chroma[(target_idx + 1) % 12]
         
-        # If primary bin is strong, or neighbors are very strong (tuning drift)
+        # If primary bin is strong
         if energy > threshold:
             return True
+            
+        # If energy is spread to neighbors (tuning drift)
         if (left + energy + right) > (threshold * 1.5):
             return True
             

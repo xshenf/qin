@@ -56,7 +56,9 @@ class PracticeSession:
             'type': 'hit',
             'combo': self.combo,
             'score': self.score,
-            'points': points
+            'points': points,
+            'hits': self.hits,
+            'total': self.total_notes
         }
         
     def register_miss(self):

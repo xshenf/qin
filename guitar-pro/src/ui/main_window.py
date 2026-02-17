@@ -231,7 +231,7 @@ class MainWindow(QMainWindow):
         
         # 练习引擎
         self.practice_session = PracticeSession()
-        self.marked_notes = set() 
+        self.init_ui_data() # Call the new method to initialize UI-related data
 
         # 构建 UI
         self._build_menubar()
@@ -248,6 +248,21 @@ class MainWindow(QMainWindow):
         self.ui_timer = QTimer()
         self.ui_timer.timeout.connect(self._update_ui)
         self.ui_timer.setInterval(33)  # ~30fps
+
+    def init_ui_data(self):
+        """初始化UI数据"""
+        self.marked_notes = set()
+        self.hits_stability = {} # [Debounce] Track consecutive hits
+        
+        # Bar Feedback (Polyphonic / Full Score)
+        self.bar_notes = {}    # {bar_index: {note_ids...}}
+        self.note_to_bar = {}  # {note_id: bar_index}
+        self.bar_hits = {}     # {bar_index: {hit_note_ids...}}
+        self.completed_bars = set() # Track already highlighted bars
+        
+        # 示波器数据
+        self.x = np.linspace(0, 1, 1000)
+        self.y = np.zeros(1000)
 
     def _on_mir_loaded(self, tracker):
         """模型加载完成回调"""
@@ -813,6 +828,7 @@ class MainWindow(QMainWindow):
             midi_pitch = note.get('pitch')
             note_id = note.get('id')
             
+            # If already hit/marked, skip
             if note_id in self.marked_notes:
                 continue
             
@@ -852,24 +868,53 @@ class MainWindow(QMainWindow):
                     is_match = True
                     match_type = "Spectral"
             
+            # [Stability Check] Debounce Logic
             if is_match:
-                # Mark hit in score (Visual)
-                # Assuming score_view has a mark_note method that takes note_id and color
-                self.score_view.mark_note(note_id, '#44ff44') # Green
-                self.marked_notes.add(note_id)
+                # Increment continuous match counter
+                self.hits_stability[note_id] = self.hits_stability.get(note_id, 0) + 1
                 
-                # Feedback
-                print(f"[HIT] {match_type} | Time={time:.2f}s | Note={midi_pitch} ({target_freq:.1f}Hz) vs Det={detected_freq:.1f}Hz")
-                
-                # Update Session
-                res = self.practice_session.register_hit(note_id)
-                if res:
-                    self.label_score.setText(f"得分: {res['score']}")
-                    self.label_combo.setText(f"Combo: {res['combo']}")
+                # Only confirm Hit if matched for 3 consecutive frames (~100ms)
+                if self.hits_stability[note_id] >= 3:
+                    # Mark hit in score (Visual)
+                    # Assuming score_view has a mark_note method that takes note_id and color
+                    self.score_view.mark_note(note_id, '#44ff44') # Green
+                    self.marked_notes.add(note_id)
                     
-                    # 可以在 statusBar 显示连击
-                    if res['combo'] > 1 and res['combo'] % 5 == 0:
-                        self.statusBar().showMessage(f"太棒了! {res['combo']} 连击!", 2000)
+                    # [Bar Feedback] Check if bar is complete/perfect
+                    bar_idx = self.note_to_bar.get(note_id, -1)
+                    if bar_idx >= 0:
+                        if bar_idx not in self.bar_hits:
+                            self.bar_hits[bar_idx] = set()
+                        self.bar_hits[bar_idx].add(note_id)
+                        
+                        expected = self.bar_notes.get(bar_idx, set())
+                        # Check completion (using superset in case of duplicates or extra hits logic)
+                        if expected and self.bar_hits[bar_idx].issuperset(expected):
+                            if bar_idx not in self.completed_bars:
+                                self.completed_bars.add(bar_idx)
+                                print(f"[FEEDBACK] Bar {bar_idx+1} Completed Perfect!")
+                                # Visual Highlight: Turn all notes in bar Gold to indicate perfection
+                                for nid in expected:
+                                    self.score_view.mark_note(nid, '#FFD700') # Gold
+                    
+                    # Feedback
+                    print(f"[HIT] {match_type} | Time={time:.2f}s | Note={midi_pitch} ({target_freq:.1f}Hz) vs Det={detected_freq:.1f}Hz")
+                    
+                    # Update Session
+                    res = self.practice_session.register_hit(note_id)
+                    if res:
+                        self.label_score.setText(f"得分: {res['score']}")
+                        # Update Hit Rate
+                        rate = (res['hits'] / max(1, res['total'])) * 100
+                        self.label_hits.setText(f"Hits: {res['hits']}/{res['total']} ({rate:.1f}%)")
+                        self.label_combo.setText(f"Combo: {res['combo']}")
+                        
+                        # 可以在 statusBar 显示连击
+                        if res['combo'] > 1 and res['combo'] % 5 == 0:
+                            self.statusBar().showMessage(f"太棒了! {res['combo']} 连击!", 2000)
+            else:
+                # Reset counter if continuity is broken
+                self.hits_stability[note_id] = 0
 
     def _toggle_snippet_recording(self, checked):
         """切换片段录音"""
@@ -1097,6 +1142,40 @@ class MainWindow(QMainWindow):
     def _on_error(self, message: str):
         """错误回调"""
         self.statusBar().showMessage(f"⚠️ {message}")
+
+    def _on_score_data_received(self, data: dict):
+        """乐谱数据接收回调 (From AlphaTab)"""
+        events = data.get('events', [])
+        if not events:
+            return
+            
+        print(f"[MainWindow] 收到乐谱数据: {len(events)} 音符")
+        
+        # 1. 加载到对齐引擎
+        self.score_follower.load_score_from_midi_events(events)
+        
+        # 2. 构建小节索引 (for Visual Feedback)
+        self.bar_notes.clear()
+        self.note_to_bar.clear()
+        self.bar_hits.clear()
+        self.completed_bars.clear()
+        
+        for ev in events:
+            # ev: [start, dur, pitch, id, bar_idx]
+            # Note: ScoreFollower.load_score... expects specific format, but we just pass list.
+            # We parse for our own use here.
+            if len(ev) >= 4:
+                note_id = int(ev[3])
+                # bar_idx might not be present if older score_viewer.html or error
+                bar_idx = int(ev[4]) if len(ev) >= 5 else -1
+                
+                if bar_idx >= 0:
+                    if bar_idx not in self.bar_notes:
+                        self.bar_notes[bar_idx] = set()
+                    self.bar_notes[bar_idx].add(note_id)
+                    self.note_to_bar[note_id] = bar_idx
+                
+        print(f"[MainWindow] 小节索引构建完成: {len(self.bar_notes)} 小节")
 
     def closeEvent(self, event):
         """窗口关闭时清理资源"""
