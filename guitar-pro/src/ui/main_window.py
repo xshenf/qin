@@ -20,6 +20,7 @@ from src.audio.audio_io import AudioIO
 from src.mir.preprocessor import AudioPreprocessor
 from src.mir.pitch import PitchTracker
 from src.mir.alignment import ScoreFollower
+from src.engine.practice import PracticeSession
 from src.ui.score_view import ScoreView
 from src.ui.icons import get_icon
 
@@ -249,7 +250,8 @@ class MainWindow(QMainWindow):
         # 乐谱跟随 (对齐)
         self.score_follower = ScoreFollower(sample_rate=self.audio.sample_rate)
         
-        # 练习状态
+        # 练习引擎
+        self.practice_session = PracticeSession()
         self.marked_notes = set() # 记录已命中的音符ID
 
         # 构建 UI
@@ -581,6 +583,20 @@ class MainWindow(QMainWindow):
         pitch_layout.addWidget(self.pitch_display)
         right_panel.addWidget(pitch_group)
 
+        # 练习统计 (Score/Combo)
+        stats_group = QGroupBox("练习统计")
+        stats_layout = QVBoxLayout(stats_group)
+        
+        self.label_score = QLabel("得分: 0")
+        self.label_score.setStyleSheet("font-size: 18px; font-weight: bold; color: #FFD700;") # Gold
+        
+        self.label_combo = QLabel("Combo: 0")
+        self.label_combo.setStyleSheet("font-size: 24px; font-weight: bold; color: #00FF00;") # Green
+        
+        stats_layout.addWidget(self.label_score)
+        stats_layout.addWidget(self.label_combo)
+        right_panel.addWidget(stats_group)
+
         right_panel.addStretch()
         analysis_layout.addLayout(right_panel, stretch=1)
 
@@ -749,9 +765,18 @@ class MainWindow(QMainWindow):
             
             if semitone_error < 0.5:
                 # 命中!
-                # print(f"Hit! Note: {midi_pitch} Error: {semitone_error:.2f}")
                 self.score_view.mark_note(note_id, '#44ff44') # Green
                 self.marked_notes.add(note_id)
+                
+                # 记录得分
+                res = self.practice_session.register_hit(note_id)
+                if res:
+                    self.label_score.setText(f"得分: {res['score']}")
+                    self.label_combo.setText(f"Combo: {res['combo']}")
+                    
+                    # 可以在 statusBar 显示连击
+                    if res['combo'] > 1 and res['combo'] % 5 == 0:
+                        self.statusBar().showMessage(f"太棒了! {res['combo']} 连击!", 2000)
 
     def _update_pitch_display(self, freq: float, conf: float):
         """Update pitch display with frequency and calculate note info"""
@@ -833,10 +858,26 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage("练习模式已开启 - 自动跟随")
             self.score_follower.reset()
             self.marked_notes.clear() # 清除命中记录
+            
+            # 初始化练习统计
+            total_notes = len(self.score_follower.events) if hasattr(self.score_follower, 'events') else 0
+            self.practice_session.start(total_notes)
+            self.label_score.setText("得分: 0")
+            self.label_combo.setText("Combo: 0")
+            
             # Reset cursor to start
             self.score_view.set_cursor_time(0.0)
         else:
             self.statusBar().showMessage("练习模式已关闭")
+            self.practice_session.stop()
+            
+            # 弹出结算 summary (简单演示)
+            summary = self.practice_session.get_summary()
+            QMessageBox.information(self, "练习完成", 
+                f"得分: {summary['score']}\n"
+                f"准确率: {summary['accuracy']:.1f}%\n"
+                f"最大连击: {summary['max_combo']}\n"
+                f"命中: {summary['hits']}/{summary['hits'] + summary['misses']}")
 
     def _set_stave(self, profile: str):
         """谱面模式切换"""
