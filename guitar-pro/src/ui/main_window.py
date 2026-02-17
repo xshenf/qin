@@ -766,8 +766,10 @@ class MainWindow(QMainWindow):
 
         # 3. 乐谱跟随 & 练习反馈
         if self.score_follower.is_ready and self.btn_practice.isChecked():
-            # Pass pre-detected f0 to guide chroma extraction for more robustness
-            est_time = self.score_follower.process_frame(
+            # 3. Audio Alignment (Score Follower)
+            # Process frame and get estimated time in score
+            # [Polyphonic Upgrade] Now returns (time, chroma)
+            est_time, chroma = self.score_follower.process_frame(
                 preprocessed_data, 
                 f0=freq, 
                 confidence=conf
@@ -787,13 +789,13 @@ class MainWindow(QMainWindow):
                      # print(f"[Detected] Freq={freq:.1f}Hz (Conf={conf:.2f})")
                      pass 
 
-            # 视觉反馈 (Visual Feedback)
-            # Lower threshold to Ensure we try to match even if confidence is mediocre
-            if freq > 0 and conf > 0.1:
-                self._check_note_hit(est_time, freq)
+                # 4. Check Hits
+                # Lower threshold to Ensure we try to match even if confidence is mediocre
+                if freq > 0 and conf > 0.1:
+                    self._check_note_hit(est_time, freq, chroma)
 
-    def _check_note_hit(self, time: float, detected_freq: float):
-        """检查当前时间点的音符是否命中 (支持八度容差)"""
+    def _check_note_hit(self, time: float, detected_freq: float, chroma=None):
+        """检查当前时间点的音符是否命中 (支持八度容差 & 频谱能量)"""
         active_notes = self.score_follower.get_active_notes(time)
         
         # if not active_notes:
@@ -842,6 +844,13 @@ class MainWindow(QMainWindow):
                     match_type = "Direct"
                 else: 
                     match_type = f"Octave({int(octave_diff)})"
+            
+            # [Polyphonic Upgrade] Secondary Check: Spectral Energy
+            # If F0-based check failed, try checking chroma energy directly
+            if not is_match and chroma is not None:
+                if self.score_follower.check_chroma_hit(chroma, midi_pitch):
+                    is_match = True
+                    match_type = "Spectral"
             
             if is_match:
                 # Mark hit in score (Visual)

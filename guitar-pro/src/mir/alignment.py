@@ -121,6 +121,10 @@ class ChromaExtractor:
 
     def compute(self, audio: np.ndarray) -> np.ndarray:
         """Compute chroma vector for an audio frame."""
+        # 0. Pre-emphasis (High-pass filter to boost harmonics/transients for Guitar)
+        if len(audio) > 1:
+            audio = np.append(audio[0], audio[1:] - 0.97 * audio[:-1])
+
         # 1. Windowing
         if len(audio) < self.n_fft:
             # Pad if too short
@@ -148,7 +152,7 @@ class ChromaExtractor:
     def compute_from_f0(self, f0: float, confidence: float) -> np.ndarray:
         """
         Synthesize a clean chroma vector from a detected pitch.
-        This provides much cleaner features for DTW than raw FFT.
+        (Kept for legacy or specific single-note checks)
         """
         chroma = np.zeros(12)
         if f0 > 30 and confidence > 0.1:
@@ -291,21 +295,17 @@ class ScoreFollower:
             self.dtw.reset()
 
     def process_frame(self, audio_frame: np.ndarray, f0: float = None, 
-                      confidence: float = 0.0) -> float:
+                      confidence: float = 0.0) -> tuple[float, np.ndarray]:
         """
-        Process live audio frame and return estimated time in score (seconds).
-        Optional: can take pre-detected f0 to use F0-based Chroma.
+        Process live audio frame.
+        Returns: (estimated_time, chroma_vector)
         """
         if not self.is_ready:
-            return 0.0
+            return 0.0, np.zeros(12)
             
-        # 1. Extract Feature (Chroma)
-        if f0 is not None and f0 > 0:
-            # Use high-quality F0-based Chroma if available
-            chroma = self.chroma_extractor.compute_from_f0(f0, confidence)
-        else:
-            # Fallback to FFT-based Chroma
-            chroma = self.chroma_extractor.compute(audio_frame)
+        # 1. Extract Feature (Always use Full Spectrum Chroma for Polyphony)
+        # Even if we have F0, we want the full harmonic context for chords.
+        chroma = self.chroma_extractor.compute(audio_frame)
         
         # 2. DTW Step
         frame_idx = self.dtw.step(chroma)
@@ -314,5 +314,27 @@ class ScoreFollower:
         # Assuming reference features were sampled at 10Hz or similar
         estimated_time = frame_idx * 0.1 
         
-        return estimated_time
+        return estimated_time, chroma
 
+    def check_chroma_hit(self, chroma: np.ndarray, target_pitch: int, threshold: float = 0.4) -> bool:
+        """
+        Check if the target pitch is present in the chroma vector (Spectral Energy Check).
+        Wrapper for Energy-based Scoring.
+        """
+        if chroma is None or len(chroma) != 12:
+            return False
+            
+        target_idx = target_pitch % 12
+        energy = chroma[target_idx]
+        
+        # Check neighbors (leakage)
+        left = chroma[(target_idx - 1) % 12]
+        right = chroma[(target_idx + 1) % 12]
+        
+        # If primary bin is strong, or neighbors are very strong (tuning drift)
+        if energy > threshold:
+            return True
+        if (left + energy + right) > (threshold * 1.5):
+            return True
+            
+        return False
