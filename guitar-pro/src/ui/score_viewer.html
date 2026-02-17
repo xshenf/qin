@@ -134,9 +134,12 @@
         }
 
         .at-cursor-beat {
-            background: #42b883 !important;
-            /* Vue theme green */
-            width: 2px !important;
+            /* Background cursor: Blue Box */
+            background: rgba(0, 123, 255, 0.35) !important;
+            /* Width handled by AlphaTab to match internal scale */
+            border-radius: 4px;
+            margin-left: -2px;
+            /* Center adjustment */
             will-change: left, top;
             z-index: 10;
         }
@@ -306,7 +309,7 @@
                 player: {
                     enablePlayer: true,
                     enableCursor: true,
-                    enableAnimatedBeatCursor: true,
+                    enableAnimatedBeatCursor: false, // Turn off continuous movement
                     enableElementHighlighting: true,
                     soundFont: getResourcePath('soundfont'),
                     scrollElement: wrapper, // IMPORTANT: wrapper has overflow-y: auto
