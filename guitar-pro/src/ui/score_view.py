@@ -68,6 +68,8 @@ class JsBridge(QObject):
         elif event == 'renderProgress':
             progress = parsed.get('progress', 0)
             self.renderProgress.emit(progress)
+        elif event == 'debug':
+            print(f"[JS_DEBUG] {json.dumps(parsed, ensure_ascii=False)}")
         elif event == 'error':
             message = parsed.get('message', '未知错误')
             self.errorOccurred.emit(message)
@@ -165,13 +167,15 @@ class ScoreView(QWidget):
         self.bridge.zoomChanged.connect(self._on_zoom_changed)
         self.bridge.layoutModeChanged.connect(self._on_layout_mode_changed)
         self.bridge.scoreDataReceived.connect(self.scoreDataReceived.emit)
-        self.bridge.scoreDataReceived.connect(self.scoreDataReceived.emit)
 
     def _load_html(self):
         """加载 AlphaTab HTML 模板"""
+        import time
         html_path = Path(__file__).parent / 'score_viewer.html'
         if html_path.exists():
-            self.web_view.setUrl(QUrl.fromLocalFile(str(html_path)))
+            url = QUrl.fromLocalFile(str(html_path.absolute()))
+            url.setQuery(f"v={time.time()}")
+            self.web_view.setUrl(url)
         else:
             print(f"[ScoreView] HTML 模板未找到: {html_path}")
 

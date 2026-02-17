@@ -186,61 +186,104 @@ class ScoreFollower:
     def load_score_from_midi_events(self, events: list):
         """
         Synthesize reference features from a list of note events.
-        
-        Args:
-            events: List of (start_time, duration, midi_pitch, note_id)
+        [FINAL_STABILITY_V3] 2026-02-17
         """
         if not events:
+            print("[ScoreFollower] ERROR: Received empty events list.")
+            return
+
+        print(f"[ScoreFollower] load_score_from_midi_events: Received {len(events)} events.")
+        # DEBUG: Print raw samples to catch scaling bugs
+        print(f"[ScoreFollower] RAW SAMPLE (First): {events[0]}")
+        if len(events) > 1:
+            print(f"[ScoreFollower] RAW SAMPLE (Second): {events[1]}")
+        print(f"[ScoreFollower] RAW SAMPLE (Last): {events[-1]}")
+        
+        # 1. Filter and clean data
+        valid_events = []
+        for e in events:
+            if e and len(e) >= 3:
+                try:
+                    start = float(e[0])
+                    dur = float(e[1])
+                    pitch = int(e[2])
+                    note_id = int(e[3]) if len(e) > 3 else -1
+                    
+                    if not (np.isnan(start) or np.isnan(dur)):
+                        valid_events.append([start, dur, pitch, note_id])
+                except (TypeError, ValueError):
+                    continue
+        
+        if not valid_events:
+            print("[ScoreFollower] ERROR: No valid events to process after filtering.")
             return
             
-        self.events = events # Store for feedback lookup
+        self.events = valid_events
+        print(f"[ScoreFollower] Events loaded: {len(self.events)}")
             
-        # 1. Determine total duration
-        # Event might have 3 or 4 elements now
-        last_event = max(events, key=lambda x: x[0] + x[1])
-        total_duration = last_event[0] + last_event[1]
+        # 2. Determine total duration
+        try:
+            # Sort by end time to find real duration
+            max_end = 0
+            for start, dur, *rest in valid_events:
+                max_end = max(max_end, start + dur)
+            
+            total_duration = max_end
+            print(f"[ScoreFollower] LOGICAL DURATION: {total_duration:.2f} seconds.")
+            
+            if total_duration < 1.0 and len(valid_events) > 10:
+                print("[ScoreFollower] WARNING: Duration is extremely short. Check JS time units!")
+        except Exception as e:
+            print(f"[ScoreFollower] Exception in duration calculation: {e}")
+            total_duration = 0
+            
+        if total_duration <= 0:
+            print("[ScoreFollower] ABORT: Total duration is 0.")
+            return
         
-        # 2. Create time grid (100ms hop size or similar)
-        # We need to match the hop size used in process_frame's time estimation logic
-        # In process_frame we assumed 10Hz (0.1s). Let's stick to that for now or make it configurable.
+        # 3. Create time grid (10Hz)
         fps = 10 
-        n_frames = int(np.ceil(total_duration * fps)) + 1
+        n_frames = int(np.ceil(total_duration * fps)) + 5 # Safety buffer
+        print(f"[ScoreFollower] Initializing reference matrix: {n_frames} frames ({total_duration:.2f}s @ {fps}fps)")
         
         ref_features = np.zeros((n_frames, 12))
         
-        # 3. Fill features
-        for event in events:
-            # Handle variable length tuple (backwards compatibility or new format)
-            if len(event) >= 3:
-                start, dur, pitch = event[0], event[1], event[2]
-                
-                start_frame = int(start * fps)
-                end_frame = int((start + dur) * fps)
-                chroma_idx = pitch % 12
-                
-                # Simple binary activation
-                ref_features[start_frame:end_frame, chroma_idx] = 1.0
+        # 4. Fill features
+        for start, dur, pitch, *rest in valid_events:
+            start_frame = int(round(start * fps))
+            end_frame = int(round((start + dur) * fps))
+            chroma_idx = int(pitch % 12)
             
-        # Normalize
+            if 0 <= start_frame < n_frames:
+                ref_features[start_frame:min(end_frame + 1, n_frames), chroma_idx] = 1.0
+                
+        # 5. Load features into DTW
+        self.load_score_features(ref_features)
+            
+        # Normalize for Cosine distance
         norm = np.linalg.norm(ref_features, axis=1, keepdims=True)
         ref_features = np.divide(ref_features, norm, out=np.zeros_like(ref_features), where=norm > 0)
         
         self.load_score_features(ref_features)
 
     def get_active_notes(self, time: float) -> list:
-        """Get list of notes active at the given time."""
+        """Get list of notes active at the given time (in seconds)."""
         if not hasattr(self, 'events'):
             return []
             
         active = []
         for event in self.events:
-            # event: [start, dur, pitch, id]
+            # event: [startTime, duration, midiPitch, noteId]
             if len(event) >= 4:
-                start, dur, pitch, note_id = event
-                if start <= time <= start + dur:
+                start, dur, pitch, note_id = event[:4]
+                # Allow a small 0.1s tolerance
+                if (start - 0.1) <= time <= (start + dur + 0.1):
                     active.append({'start': start, 'dur': dur, 'pitch': pitch, 'id': note_id})
+        
+        # DEBUG: If no notes found but we are within total duration, maybe print?
+        # limiting print to avoid spam, handled in MainWindow
+                    
         return active
-
 
     def reset(self):
         """Reset alignment state."""

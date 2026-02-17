@@ -776,14 +776,23 @@ class MainWindow(QMainWindow):
             # 同步给 ScoreView 光标
             self.score_view.set_cursor_time(est_time)
             
+            # DEBUG: Real-time analysis log
+            if rms_db > -50:
+                print(f"[Perf] RMS={rms_db:.1f}dB Conf={conf:.2f} Freq={freq:.1f}Hz Time={est_time:.2f}s")
+
             # 视觉反馈 (Visual Feedback)
-            if freq > 0 and conf > 0.4:
+            # LOWERED THRESHOLD FOR DEBUGGING: 0.4 -> 0.01
+            if freq > 0 and conf > 0.01:
                 self._check_note_hit(est_time, freq)
 
     def _check_note_hit(self, time: float, detected_freq: float):
         """检查当前时间点的音符是否命中"""
         active_notes = self.score_follower.get_active_notes(time)
         
+        if not active_notes:
+            print(f"[HitCheck] Time={time:.2f}s | No active notes found.")
+            return
+
         import math
         
         for note in active_notes:
@@ -798,6 +807,9 @@ class MainWindow(QMainWindow):
             # semitone_diff = 12 * log2(f / target)
             semitone_error = abs(12 * math.log2(detected_freq / target_freq))
             
+            # DEBUG: Print detailed error for closest note
+            print(f"[HitCheck] Time={time:.2f}s | Note={midi_pitch} ({target_freq:.1f}Hz) vs Det={detected_freq:.1f}Hz -> Err={semitone_error:.2f} semi")
+
             if semitone_error < 0.5:
                 # 命中!
                 self.score_view.mark_note(note_id, '#44ff44') # Green
@@ -868,27 +880,36 @@ class MainWindow(QMainWindow):
 
     # ==== 乐谱相关 ====
 
+    # ==== 乐谱相关事件回调 ====
+
+    @Slot(dict)
     def _on_score_loaded(self, info: dict):
-        """乐谱加载完成回调"""
+        """乐谱加载完成回调 (JS -> Python)"""
         title = info.get('title', '未知标题')
         artist = info.get('artist', '未知艺术家')
-        self.statusBar().showMessage(f"乐谱已加载: {title} - {artist}")
+        tempo = info.get('tempo', '?')
+        bars = info.get('bars', 0)
         
-        # 请求获取详细音符数据用于对齐
-        # 延迟一点请求，确保 AlphaTab 完全渲染完毕
-        QTimer.singleShot(500, self.score_view.request_score_data)
+        self.setWindowTitle(f"Guitar Pro — {title} - {artist}")
+        self.statusBar().showMessage(f"乐谱已加载: {title} | ♩={tempo} | {bars}小节")
+        print(f"[MainWindow] 乐谱加载成功: {title}")
+
+        # 数据请求现在移至渲染完成回调 (_on_render_progress)
 
     @Slot(dict)
     def _on_score_data_received(self, data: dict):
-        """接收到乐谱数据 (JS -> Python)"""
+        """接收到后端提取的乐谱音符数据 (JS -> Python)"""
         events = data.get('events', [])
+        if not events:
+            print("[MainWindow] 收到空的乐谱数据")
+            return
+            
         print(f"[MainWindow] 收到乐谱数据: {len(events)} 个音符事件")
         
-        # 将数据加载到 ScoreFollower
-        # event: [startTime, duration, midiPitch]
-        if events:
-            self.score_follower.load_score_from_midi_events(events)
-            self.statusBar().showMessage(f"对齐数据已就绪: {len(events)} 音符")
+        # 将数据加载到 ScoreFollower 对齐引擎
+        # event 格式: [startTime, duration, midiPitch, noteId]
+        self.score_follower.load_score_from_midi_events(events)
+        self.statusBar().showMessage(f"对齐引擎就绪: 已同步 {len(events)} 个音符", 3000)
 
     def _open_score_file(self):
         """打开乐谱文件对话框"""
@@ -899,6 +920,7 @@ class MainWindow(QMainWindow):
             "乐谱文件 (*.gp3 *.gp4 *.gp5 *.gpx *.gp *.musicxml *.mxl *.xml *.mid *.midi);;所有文件 (*)"
         )
         if file_path:
+            self._score_data_requested = False # 重置请求锁
             self.score_view.load_file(file_path)
             self.statusBar().showMessage(f"正在加载: {file_path}")
 
@@ -991,14 +1013,7 @@ class MainWindow(QMainWindow):
         if 0 <= index < len(profiles):
             self._set_stave(profiles[index])
 
-    def _on_score_loaded(self, info: dict):
-        """乐谱加载完成"""
-        title = info.get('title', '未命名')
-        artist = info.get('artist', '')
-        tempo = info.get('tempo', '?')
-        bars = info.get('bars', 0)
-        self.setWindowTitle(f"Guitar Pro — {title} - {artist}")
-        self.statusBar().showMessage(f"已加载: {title} | {artist} | ♩={tempo} | {bars}小节")
+    # (此处原有的 _on_score_loaded 已删除以移除冗余)
 
 
 
@@ -1030,6 +1045,8 @@ class MainWindow(QMainWindow):
             self.statusBar().showMessage(f"渲染中... {progress}%")
         else:
             self.statusBar().showMessage("渲染完成")
+            # 渲染完成后请求获取详细音符数据，确保 API 此时完全可用
+            QTimer.singleShot(200, self.score_view.request_score_data)
 
     def _on_error(self, message: str):
         """错误回调"""
