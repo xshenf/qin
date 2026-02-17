@@ -242,10 +242,8 @@ class MainWindow(QMainWindow):
         # 音频预处理 (用于分析)
         self.preprocessor = AudioPreprocessor(self.audio.sample_rate)
 
-        # 音高检测器 (16kHz usually for CREPE, but we pass full rate and let it handle/resample if needed, or initialized with full rate)
-        # Note: CREPE models are trained on 16kHz. PitchTracker might need to handle resampling if CREPE is used.
-        # Our simple wrapper currently expects 16000 for CREPE.
-        self.pitch_tracker = PitchTracker(sample_rate=self.audio.sample_rate)
+        # 音高检测器 (使用预处理器的目标采样率)
+        self.pitch_tracker = PitchTracker(sample_rate=self.preprocessor.target_sr)
 
         # 乐谱跟随 (对齐)
         self.score_follower = ScoreFollower(sample_rate=self.audio.sample_rate)
@@ -710,8 +708,8 @@ class MainWindow(QMainWindow):
         waveform_data = self.audio.get_buffer(duration_ms=100)
         
         # 预处理数据 (用于频谱和分析)
-        # 获取稍长一点的数据以获得更好的频率分辨率
-        raw_analysis_data = self.audio.get_buffer(duration_ms=60)
+        # 获取 100ms 数据以提高低频分辨率
+        raw_analysis_data = self.audio.get_buffer(duration_ms=100)
         
         # 使用预处理 (加窗、预加重)
         preprocessed_data = self.preprocessor.process(raw_analysis_data, apply_window=True)
@@ -741,10 +739,13 @@ class MainWindow(QMainWindow):
         # 使用 PitchTracker
         # 2. 音高检测
         freq, conf = 0.0, 0.0
-        if rms_db > -50:
-             # Predict pitch using the tracker
-             freq, conf = self.pitch_tracker.predict(preprocessed_data)
-             if freq > 0 and conf > 0.4: # Tweak confidence threshold
+        if rms_db > -60: # Lowered threshold to -60dB
+             # Predict pitch using the tracker. 
+             # IMPORTANT: Disable windowing for YIN (preprocessed_pitch)
+             preprocessed_pitch = self.preprocessor.process(raw_analysis_data, apply_window=False)
+             freq, conf = self.pitch_tracker.predict(preprocessed_pitch)
+             
+             if freq > 0 and conf > 0.25: # Lowered confidence threshold for YIN
                  self._update_pitch_display(freq, conf)
              else:
                  self.pitch_display.clear_pitch()

@@ -74,25 +74,91 @@ class PitchTracker:
         return self._fallback_pitch(audio)
 
     def _fallback_pitch(self, audio: np.ndarray) -> tuple[float, float]:
-        """Simple autocorrelation/FFT fallback"""
-        # Simple HPS (Harmonic Product Spectrum) or YIN implementation could go here
-        # For now, reuse the MainWindow's simple FFT approach logic or similar
-        
-        # FFT Peak
-        if len(audio) < 2048:
-            padded = np.zeros(2048)
-            padded[:len(audio)] = audio
-            audio = padded
+        """Robust pitch detection using YIN algorithm or librosa"""
+        try:
+            import librosa
+            # Expanded range to cover full guitar fretboard
+            fmin = 50
+            fmax = 1500
             
-        fft = np.fft.rfft(audio * np.hanning(len(audio)))
-        magnitude = np.abs(fft)
-        freqs = np.fft.rfftfreq(len(audio), 1.0 / self.sample_rate)
+            # Use YIN
+            pitches = librosa.yin(audio, fmin=fmin, fmax=fmax, sr=self.sample_rate, 
+                                 frame_length=len(audio))
+            
+            # pitches is an array
+            freq = float(np.median(pitches))
+            
+            # Improved Confidence Estimation
+            # 1. Amplitude factor
+            rms = np.sqrt(np.mean(audio**2))
+            amp_conf = min(1.0, rms * 50) 
+            
+            # 2. Harmonicity factor
+            # Check how well the periodicity matches (using auto-correlation peak)
+            corr = np.correlate(audio, audio, mode='full')
+            corr = corr[len(corr)//2:]
+            if len(corr) > 1:
+                max_corr = np.max(corr[1:])
+                total_energy = corr[0] + 1e-10
+                harm_conf = max_corr / total_energy
+            else:
+                harm_conf = 0.5
+                
+            conf = float(amp_conf * harm_conf)
+            return freq, conf
+        except (ImportError, Exception) as e:
+            # print(f"[PitchTracker] Librosa YIN failed: {e}")
+            return self._yin_custom(audio)
+
+    def _yin_custom(self, audio: np.ndarray) -> tuple[float, float]:
+        """Simplified YIN algorithm implementation"""
+        # Parameters
+        sr = self.sample_rate
+        min_freq = 50
+        max_freq = sr // 2
+        tau_min = int(sr / max_freq)
+        tau_max = int(sr / min_freq)
         
-        peak_idx = np.argmax(magnitude)
-        freq = freqs[peak_idx]
+        # 1. Difference function
+        # d[tau] = sum_{j=1..W} (x[j] - x[j+tau])^2
+        window_size = len(audio) // 2
+        difference = np.zeros(tau_max)
+        for tau in range(1, tau_max):
+            diff = audio[:window_size] - audio[tau:tau + window_size]
+            difference[tau] = np.sum(diff ** 2)
+            
+        # 2. Cumulative Mean Normalized Difference Function (CMNDF)
+        cmndf = np.zeros(tau_max)
+        cmndf[0] = 1.0
+        running_sum = 0.0
+        for tau in range(1, tau_max):
+            running_sum += difference[tau]
+            if running_sum == 0:
+                cmndf[tau] = 1.0
+            else:
+                cmndf[tau] = difference[tau] / (running_sum / tau)
+                
+        # 3. Absolute threshold
+        threshold = 0.15
+        tau_found = -1
+        for tau in range(tau_min, tau_max):
+            if cmndf[tau] < threshold:
+                tau_found = tau
+                # Find the local minimum after crossing threshold
+                while tau + 1 < tau_max and cmndf[tau+1] < cmndf[tau]:
+                    tau += 1
+                    tau_found = tau
+                break
         
-        # Simple confidence: peak vs mean
-        confidence = magnitude[peak_idx] / (np.mean(magnitude) + 1e-6)
-        confidence = min(1.0, confidence / 100.0) # Arbitrary scaling
+        if tau_found == -1:
+            # If no dip below threshold, take global minimum
+            tau_found = np.argmin(cmndf[tau_min:]) + tau_min
+            
+        # Confidence calculation (depth of the dip)
+        confidence = 1.0 - cmndf[tau_found]
+        # Weight by volume
+        rms = np.sqrt(np.mean(audio**2))
+        confidence *= min(1.0, rms * 50)
         
+        freq = sr / tau_found if tau_found > 0 else 0.0
         return float(freq), float(confidence)
