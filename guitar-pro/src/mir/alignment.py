@@ -145,6 +145,25 @@ class ChromaExtractor:
             
         return chroma
 
+    def compute_from_f0(self, f0: float, confidence: float) -> np.ndarray:
+        """
+        Synthesize a clean chroma vector from a detected pitch.
+        This provides much cleaner features for DTW than raw FFT.
+        """
+        chroma = np.zeros(12)
+        if f0 > 30 and confidence > 0.1:
+            # MIDI = 69 + 12 * log2(f0 / 440)
+            midi = 69 + 12 * np.log2(f0 / 440.0)
+            chroma_idx = int(round(midi)) % 12
+            # Use confidence to weight the activation
+            chroma[chroma_idx] = confidence
+            
+        # Normalize
+        norm = np.linalg.norm(chroma)
+        if norm > 0:
+            chroma /= norm
+        return chroma
+
 class ScoreFollower:
     """
     High-level wrapper for Audio-to-Score alignment.
@@ -228,22 +247,28 @@ class ScoreFollower:
         if self.dtw:
             self.dtw.reset()
 
-    def process_frame(self, audio_frame: np.ndarray) -> float:
+    def process_frame(self, audio_frame: np.ndarray, f0: float = None, 
+                      confidence: float = 0.0) -> float:
         """
         Process live audio frame and return estimated time in score (seconds).
+        Optional: can take pre-detected f0 to use F0-based Chroma.
         """
         if not self.is_ready:
             return 0.0
             
         # 1. Extract Feature (Chroma)
-        chroma = self.chroma_extractor.compute(audio_frame)
+        if f0 is not None and f0 > 0:
+            # Use high-quality F0-based Chroma if available
+            chroma = self.chroma_extractor.compute_from_f0(f0, confidence)
+        else:
+            # Fallback to FFT-based Chroma
+            chroma = self.chroma_extractor.compute(audio_frame)
         
         # 2. DTW Step
         frame_idx = self.dtw.step(chroma)
         
         # 3. Convert frame index to time
-        # Assuming reference features were sampled at 10Hz or similar (needs definition)
-        # Let's assume standard 100ms hop for features (10fps for score features)
+        # Assuming reference features were sampled at 10Hz or similar
         estimated_time = frame_idx * 0.1 
         
         return estimated_time

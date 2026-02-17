@@ -2,13 +2,23 @@
 import numpy as np
 import warnings
 
-# Try importing CREPE, handle if missing
+# Try importing CREPE/RMVPE, handle if missing
 try:
     import crepe
     HAS_CREPE = True
 except ImportError:
     HAS_CREPE = False
-    print("[PitchTracker] CREPE not found. Falling back to basic methods.")
+    print("[PitchTracker] CREPE not found.")
+
+try:
+    from .rmvpe import RMVPE
+    HAS_RMVPE = True
+except Exception as e:
+    HAS_RMVPE = False
+    print(f"[PitchTracker] RMVPE module load failed: {e}")
+    # If it's a ModuleNotFoundError, we might want to be more specific
+    if "librosa" in str(e):
+        print(" -> Hint: Please install librosa: pip install librosa")
 
 class PitchTracker:
     """
@@ -16,15 +26,24 @@ class PitchTracker:
     Default: CREPE (Convolutional Representation for Pitch Estimation) if available.
     """
     
-    def __init__(self, sample_rate: int = 16000, model_capacity: str = 'tiny'):
+    def __init__(self, sample_rate: int = 16000, model_capacity: str = 'tiny', 
+                 use_rmvpe: bool = True):
         """
         Args:
-            sample_rate: Audio sample rate (CREPE implies 16kHz usually)
+            sample_rate: Audio sample rate (CREPE implies 16kHz, RMVPE also handles 16kHz internal)
             model_capacity: CREPE model size ('tiny', 'small', 'medium', 'large', 'full')
                             'tiny' is recommended for real-time CPU usage.
+            use_rmvpe: Use RMVPE model if available (Recommended).
         """
         self.sample_rate = sample_rate
         self.model_capacity = model_capacity
+        self.use_rmvpe = use_rmvpe
+        
+        self.rmvpe_engine = None
+        if HAS_RMVPE and use_rmvpe:
+            self.rmvpe_engine = RMVPE()
+            if not self.rmvpe_engine.is_ready:
+                print("[PitchTracker] RMVPE model not loaded (missing file?).")
         
     def predict(self, audio: np.ndarray) -> tuple[float, float]:
         """
@@ -38,34 +57,33 @@ class PitchTracker:
             frequency: Detected pitch in Hz, or 0.0 if no pitch
             confidence: 0.0 to 1.0 confidence score
         """
-        # Ensure correct shape/type for CREPE
+        # Ensure correct shape/type
         if len(audio) < 1024:
             return 0.0, 0.0
             
-        if HAS_CREPE:
-            # CREPE predict usually expects a batch or a long file.
-            # For real-time frame-by-frame, we use `crepe.predict` on a single window.
-            # Note: crepe.predict can be slow if not optimized or running on GPU.
-            # For real-time, we might need a persistent model session or use 'tiny'.
+        # 0. Try RMVPE first (Superior robustness)
+        if self.rmvpe_engine and self.rmvpe_engine.is_ready:
+            try:
+                freq, conf = self.rmvpe_engine.predict(audio, self.sample_rate)
+                if conf > 0.1: # Confidence threshold
+                    return freq, conf
+            except Exception as e:
+                print(f"[PitchTracker] RMVPE error: {e}")
             
-            # Step size 10ms is standard
+        if HAS_CREPE:
             try:
                 # Suppress verbose TF/CREPE output
-                # time, frequency, confidence, activation = ...
-                # We pass verbose=0
                 time, frequency, confidence, _ = crepe.predict(
                     audio, 
                     self.sample_rate, 
                     viterbi=True, 
-                    step_size=len(audio)/self.sample_rate*1000, # Single step
+                    step_size=len(audio)/self.sample_rate*1000, 
                     model_capacity=self.model_capacity,
                     verbose=0
                 )
                 
                 if len(frequency) > 0:
-                    # Return the median or mean of the chunk if multiple frames detected
-                    # Usually for a small buffer we get 1 or few frames
-                    best_idx = np.argmax(confidence)
+                    best_idx = int(np.argmax(confidence))
                     return float(frequency[best_idx]), float(confidence[best_idx])
             except Exception as e:
                 print(f"[PitchTracker] CREPE error: {e}")
@@ -75,6 +93,7 @@ class PitchTracker:
 
     def _fallback_pitch(self, audio: np.ndarray) -> tuple[float, float]:
         """Robust pitch detection using YIN algorithm or librosa"""
+        rms = np.sqrt(np.mean(audio**2))
         try:
             import librosa
             # Expanded range to cover full guitar fretboard
@@ -89,9 +108,7 @@ class PitchTracker:
             freq = float(np.median(pitches))
             
             # Improved Confidence Estimation
-            # 1. Amplitude factor
-            rms = np.sqrt(np.mean(audio**2))
-            amp_conf = min(1.0, rms * 50) 
+            amp_conf = min(1.0, float(rms) * 50) 
             
             # 2. Harmonicity factor
             # Check how well the periodicity matches (using auto-correlation peak)
