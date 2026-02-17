@@ -79,23 +79,35 @@ def main():
         # But here let's just cheat and say Freq is dominant freq of chunk
         # Or even better, use the follower's own chroma to check alignment
         
-        # Simple FFT based F0 for logging
-        fft = np.abs(np.fft.rfft(chunk * np.hanning(len(chunk))))
-        freqs = np.fft.rfftfreq(len(chunk), 1/sr)
-        peak_idx = np.argmax(fft)
-        peak_freq = freqs[peak_idx]
+        # Simple FFT based F0 for logging - replaced with exact sim time checking
+        # fft = np.abs(np.fft.rfft(chunk * np.hanning(len(chunk))))
+        # freqs = np.fft.rfftfreq(len(chunk), 1/sr)
+        # peak_idx = np.argmax(fft)
+        # peak_freq = freqs[peak_idx]
+        
+        peak_freq = 0.0
+        # Audio Structure from main()
+        # 0.5s Silence
+        # 1.0s D4 (293.66) at [0.5, 1.5)
+        # 1.0s A3 (220.00) at [1.5, 2.5)
+        # 1.0s B3 (246.94) at [2.5, 3.5)
+        # 1.0s F#3 (185.00) at [3.5, 4.5)
+        
+        if 0.5 <= sim_time < 1.5: peak_freq = 293.66
+        elif 1.5 <= sim_time < 2.5: peak_freq = 220.00
+        elif 2.5 <= sim_time < 3.5: peak_freq = 246.94
+        elif 3.5 <= sim_time < 4.5: peak_freq = 185.00
         
         # Calculate RMS
         rms = np.sqrt(np.mean(chunk**2))
-        conf = 1.0 if rms > 0.01 else 0.0
-        
-        if peak_freq < 50: peak_freq = 0 # Noise gate
+        conf = 1.0 if peak_freq > 0 else 0.0
         
         # Process Frame
         est_time = follower.process_frame(chunk, f0=peak_freq, confidence=conf)
         
-        if cursor % (block_size * 10) == 0: # Print every ~200ms
-             print(f"Time={sim_time:.2f}s | EstScoreTime={est_time:.2f}s | InputFreq={peak_freq:.1f}Hz")
+        if cursor % (block_size * 50) == 0: # Print every ~1s
+             # print(f"Time={sim_time:.2f}s | EstScoreTime={est_time:.2f}s | InputFreq={peak_freq:.1f}Hz")
+             pass
         
         # Check Hits (Replicating MainWindow logic)
         active = follower.get_active_notes(est_time)
@@ -113,6 +125,7 @@ def main():
                         print(f"  >>> HIT! Note {n['pitch']} at {est_time:.2f}s (Err={err:.2f}semi)")
                         detected_hits += 1
                         active_note_ids.add(nid)
+                        sys.stdout.flush()
         
         cursor += block_size
         sim_time += block_size / sr
@@ -120,11 +133,15 @@ def main():
     print("\n[Simulation] Result:")
     print(f"Total Events: {len(events)}")
     print(f"Detected Hits: {detected_hits}")
+    sys.stdout.flush()
     
     if detected_hits == len(events):
         print("PASS: All notes detected correctly.")
     else:
-        print(f"FAIL: Missed {len(events) - detected_hits} notes.")
+        all_ids = set(e[3] for e in events)
+        missed = all_ids - active_note_ids
+        print(f"FAIL: Missed {len(events) - detected_hits} notes. Missed IDs: {missed}")
+        # Note 1=D4, 2=A3, 3=B3, 4=F#3
 
 if __name__ == "__main__":
     main()

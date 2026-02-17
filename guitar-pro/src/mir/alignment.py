@@ -179,7 +179,7 @@ class ScoreFollower:
         Load reference features extracted from score (MIDI/AlphaTab).
         features: (N_time_steps, 12)
         """
-        self.dtw = OnlineDTW(features, radius=50) # Set radius
+        self.dtw = OnlineDTW(features, radius=100) # Set radius
         self.is_ready = True
         print(f"[ScoreFollower] Reference loaded: {len(features)} frames")
         
