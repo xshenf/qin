@@ -136,60 +136,58 @@ class LevelMeter(QProgressBar):
 
 
 class PitchDisplay(QLabel):
-    """音高显示组件"""
+    """音高显示组件 - 优化稳定性版本"""
 
     def __init__(self, parent=None):
         super().__init__("--", parent)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.setFont(QFont("Consolas", 48, QFont.Weight.Bold))
+        self.setFixedWidth(220)  # 固定宽度防止抖动
+        self.setFixedHeight(120)
+        
+        # 基础样式只设置一次
         self.setStyleSheet("""
             QLabel {
-                color: #00d4ff;
                 background: #16213e;
                 border: 2px solid #0f3460;
-                border-radius: 10px;
-                padding: 20px;
-                min-height: 80px;
+                border-radius: 12px;
+                padding: 10px;
             }
         """)
+        self._update_color('#555555')
+
+    def _update_color(self, hex_color):
+        """高效更新文本颜色，避免 setStyleSheet 导致的重绘卡顿"""
+        palette = self.palette()
+        palette.setColor(self.foregroundRole(), QColor(hex_color))
+        self.setPalette(palette)
 
     def set_pitch(self, note: str, frequency: float, cents: float):
-        """设置检测到的音高"""
+        """设置检测到的音高，使用富文本分离字号"""
         cents_str = f"+{cents:.0f}" if cents >= 0 else f"{cents:.0f}"
-        self.setText(f"{note}\n{frequency:.1f} Hz  ({cents_str}¢)")
+        
+        # 使用 HTML 格式化：音符大，频率/音分小
+        # 这能确保布局更稳定
+        rich_text = (
+            f"<div style='line-height: 1.1;'>"
+            f"<span style='font-size: 32pt; font-family: Consolas; font-weight: bold;'>{note}</span><br/>"
+            f"<span style='font-size: 11pt; font-family: Segoe UI;'>{frequency:.1f} Hz  ({cents_str}¢)</span>"
+            f"</div>"
+        )
+        self.setText(rich_text)
 
-        # 根据音准偏移着色
+        # 快速更新颜色
         if abs(cents) < 5:
-            color = '#44ff44'  # 准确
+            color = '#44ff44'  # 准
         elif abs(cents) < 15:
-            color = '#ffcc00'  # 偏差小
+            color = '#ffcc00'  # 偏
         else:
-            color = '#ff4444'  # 偏差大
-
-        self.setStyleSheet(f"""
-            QLabel {{
-                color: {color};
-                background: #16213e;
-                border: 2px solid #0f3460;
-                border-radius: 10px;
-                padding: 20px;
-                min-height: 80px;
-            }}
-        """)
+            color = '#ff4444'  # 错
+        self._update_color(color)
 
     def clear_pitch(self):
-        """清除显示"""
-        self.setText("--")
-        self.setStyleSheet("""
-            QLabel {
-                color: #555;
-                background: #16213e;
-                border: 2px solid #0f3460;
-                border-radius: 10px;
-                padding: 20px;
-                min-height: 80px;
-            }
-        """)
+        """清空显示并恢复暗淡颜色"""
+        self.setText("<span style='font-size: 32pt; font-family: Consolas; font-weight: bold; color: #555;'>--</span>")
+        self._update_color('#555555')
 
 
 class MainWindow(QMainWindow):
@@ -200,54 +198,22 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("Guitar Pro — 专业吉他练习")
         self.setMinimumSize(1200, 800)
         self.setStyleSheet("""
-            QMainWindow {
-                background: #0a0a1a;
-            }
+            QMainWindow { background: #0a0a1a; }
             QGroupBox {
-                color: #e0e0e0;
-                border: 1px solid #333;
-                border-radius: 5px;
-                margin-top: 10px;
-                padding-top: 15px;
-                font-weight: bold;
+                color: #e0e0e0; border: 1px solid #333; border-radius: 5px;
+                margin-top: 10px; padding-top: 15px; font-weight: bold;
             }
-            QGroupBox::title {
-                subcontrol-origin: margin;
-                left: 10px;
-                padding: 0 5px;
-            }
+            QGroupBox::title { subcontrol-origin: margin; left: 10px; padding: 0 5px; }
             QPushButton {
-                background: #16213e;
-                color: #e0e0e0;
-                border: 1px solid #0f3460;
-                border-radius: 5px;
-                padding: 6px 12px;
-                font-size: 13px;
+                background: #16213e; color: #e0e0e0; border: 1px solid #0f3460;
+                border-radius: 6px; padding: 7px 15px; font-size: 13px;
             }
-            QPushButton:hover {
-                background: #1a3a6a;
-            }
-            QPushButton:pressed {
-                background: #0f3460;
-            }
-            QPushButton:checked {
-                background: #e94560;
-                border-color: #e94560;
-            }
-            QLabel {
-                color: #e0e0e0;
-            }
-            QComboBox {
-                background: #16213e;
-                color: #e0e0e0;
-                border: 1px solid #0f3460;
-                border-radius: 3px;
-                padding: 4px 8px;
-            }
-            QStatusBar {
-                background: #0f0f23;
-                color: #888;
-            }
+            QPushButton:hover { background: #1a3a6a; }
+            QPushButton:pressed { background: #0f3460; }
+            QPushButton:checked { background: #e94560; border-color: #e94560; }
+            QLabel { color: #e0e0e0; }
+            QComboBox { background: #16213e; color: #e0e0e0; border: 1px solid #0f3460; border-radius: 4px; padding: 4px 8px; }
+            QStatusBar { background: #0f0f23; color: #888; border-top: 1px solid #222; }
         """)
 
         # 音频引擎
