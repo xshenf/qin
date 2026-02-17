@@ -44,6 +44,8 @@ class PitchTracker:
             self.rmvpe_engine = RMVPE()
             if not self.rmvpe_engine.is_ready:
                 print("[PitchTracker] RMVPE model not loaded (missing file?).")
+            else:
+                print("[PitchTracker] 已启用 RMVPE 高精度音高检测后端")
         
     def predict(self, audio: np.ndarray) -> tuple[float, float]:
         """

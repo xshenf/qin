@@ -36,6 +36,11 @@ class RMVPE:
             try:
                 self.session = ort.InferenceSession(model_path, providers=providers)
                 self.is_ready = True
+                device_info = self.session.get_providers()[0]
+                print(f"[RMVPE] 模型加载成功: {model_path} ({device_info})")
+                
+                # Warmup to avoid first-run lag (important for real-time)
+                self._warmup()
             except Exception as e:
                 print(f"[RMVPE] Failed to load ONNX model: {e}")
                 self.is_ready = False
@@ -45,6 +50,16 @@ class RMVPE:
                 print("[RMVPE] onnxruntime not found.")
             elif not os.path.exists(model_path):
                 print(f"[RMVPE] Model file not found at {model_path}")
+
+    def _warmup(self):
+        """Run fake inference to pre-warm the model and resampler."""
+        try:
+            # 1 second of silence at 16kHz
+            dummy_audio = np.zeros(self.resample_sr, dtype=np.float32)
+            self.predict(dummy_audio, self.resample_sr)
+            print("[RMVPE] 模型预热完成")
+        except Exception as e:
+            print(f"[RMVPE] Warmup failed: {e}")
 
     def preprocess(self, audio: np.ndarray, sr: int) -> tuple[np.ndarray, int]:
         """

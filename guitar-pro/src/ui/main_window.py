@@ -10,9 +10,10 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLabel, QComboBox, QStatusBar,
     QProgressBar, QGroupBox, QSplitter, QFrame,
-    QFileDialog, QSlider, QSpinBox, QMenuBar, QMenu
+    QFileDialog, QSlider, QSpinBox, QMenuBar, QMenu,
+    QMessageBox
 )
-from PySide6.QtCore import Qt, QTimer, Signal, Slot
+from PySide6.QtCore import Qt, QTimer, Signal, Slot, QThread
 from PySide6.QtGui import QFont, QColor, QAction, QKeySequence, QIcon
 import pyqtgraph as pg
 
@@ -23,6 +24,19 @@ from src.mir.alignment import ScoreFollower
 from src.engine.practice import PracticeSession
 from src.ui.score_view import ScoreView
 from src.ui.icons import get_icon
+
+
+class ModelLoaderThread(QThread):
+    """后台加载模型线程"""
+    finished = Signal(object)
+
+    def __init__(self, sample_rate):
+        super().__init__()
+        self.sample_rate = sample_rate
+
+    def run(self):
+        tracker = PitchTracker(sample_rate=self.sample_rate)
+        self.finished.emit(tracker)
 
 
 class WaveformWidget(pg.PlotWidget):
@@ -242,24 +256,40 @@ class MainWindow(QMainWindow):
         # 音频预处理 (用于分析)
         self.preprocessor = AudioPreprocessor(self.audio.sample_rate)
 
-        # 音高检测器 (使用预处理器的目标采样率)
-        self.pitch_tracker = PitchTracker(sample_rate=self.preprocessor.target_sr)
-
+        # 音高检测器 - 异步加载
+        self.pitch_tracker = None
+        self.is_mir_ready = False
+        
         # 乐谱跟随 (对齐)
         self.score_follower = ScoreFollower(sample_rate=self.audio.sample_rate)
         
         # 练习引擎
         self.practice_session = PracticeSession()
-        self.marked_notes = set() # 记录已命中的音符ID
+        self.marked_notes = set() 
 
         # 构建 UI
         self._build_menubar()
         self._build_ui()
 
+        # 开始后台加载
+        self.statusBar().showMessage("正在加载 AI 音高检测模型，请稍候...")
+        self.btn_record.setEnabled(False) # 加载期间禁止采集
+        self.loader_thread = ModelLoaderThread(self.preprocessor.target_sr)
+        self.loader_thread.finished.connect(self._on_mir_loaded)
+        self.loader_thread.start()
+
         # 定时器：30fps 刷新 UI
         self.ui_timer = QTimer()
         self.ui_timer.timeout.connect(self._update_ui)
         self.ui_timer.setInterval(33)  # ~30fps
+
+    def _on_mir_loaded(self, tracker):
+        """模型加载完成回调"""
+        self.pitch_tracker = tracker
+        self.is_mir_ready = True
+        self.btn_record.setEnabled(True)
+        self.statusBar().showMessage("系统就绪 — 模型加载完成", 3000)
+        print("[MainWindow] MIR 引擎加载完成")
 
     def _build_menubar(self):
         """构建菜单栏"""
@@ -751,9 +781,8 @@ class MainWindow(QMainWindow):
         # 使用 PitchTracker
         # 2. 音高检测
         freq, conf = 0.0, 0.0
-        if rms_db > -60: # Lowered threshold to -60dB
+        if rms_db > -60 and self.pitch_tracker: 
              # Predict pitch using the tracker. 
-             # IMPORTANT: Disable windowing AND pre-emphasis for YIN. Enable denoise.
              preprocessed_pitch = self.preprocessor.process(
                  raw_analysis_data, 
                  apply_window=False, 
@@ -771,9 +800,12 @@ class MainWindow(QMainWindow):
 
         # 3. 乐谱跟随 & 练习反馈
         if self.score_follower.is_ready and self.btn_practice.isChecked():
-            # 使用稍长的分析帧进行 chroma 提取 (e.g. 100ms or 2048 samples)
-            # 这里复用 preprocessed_data (60ms) 可能偏短，但 ChromaExtractor 会自动 padding
-            est_time = self.score_follower.process_frame(preprocessed_data)
+            # Pass pre-detected f0 to guide chroma extraction for more robustness
+            est_time = self.score_follower.process_frame(
+                preprocessed_data, 
+                f0=freq, 
+                confidence=conf
+            )
             
             # 同步给 ScoreView 光标
             self.score_view.set_cursor_time(est_time)
