@@ -25,6 +25,7 @@ def get_icon(name: str, color: str = "#e0e0e0") -> QIcon:
         "practice": f"""<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" fill="{color}"/>""",
         "rec_on": f"""<circle cx="12" cy="12" r="8" fill="#ff4444"/>""",
         "rec_off": f"""<circle cx="12" cy="12" r="8" fill="{color}"/>""",
+        "noise": f"""<path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6zM12 21c-1.1 0-2-.9-2-2h4c0 1.1-.9 2-2 2z" fill="{color}"/>""",
     }
 
     content = paths.get(name, "")

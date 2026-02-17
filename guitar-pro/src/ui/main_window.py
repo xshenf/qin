@@ -548,6 +548,16 @@ class MainWindow(QMainWindow):
         self.btn_snippet_play.clicked.connect(self._play_snippet)
         toolbar.addWidget(self.btn_snippet_play)
 
+        self._add_separator(toolbar)
+
+        # 噪声校准
+        self.btn_calibrate = QPushButton()
+        self.btn_calibrate.setIcon(get_icon("noise"))
+        self.btn_calibrate.setToolTip("校准环境底噪 (需在安静环境下点击)")
+        self.btn_calibrate.setEnabled(False)
+        self.btn_calibrate.clicked.connect(self._calibrate_noise)
+        toolbar.addWidget(self.btn_calibrate)
+
         main_layout.addLayout(toolbar)
 
         # === 中间内容区 ===
@@ -672,6 +682,7 @@ class MainWindow(QMainWindow):
                 self.btn_record.setText("⏹ 停止")
                 self.btn_practice.setEnabled(True)
                 self.btn_snippet_rec.setEnabled(True)
+                self.btn_calibrate.setEnabled(True)
                 self.action_record.setText("⏹ 停止采集")
                 self.action_practice.setEnabled(True)
                 self.ui_timer.start()
@@ -693,6 +704,7 @@ class MainWindow(QMainWindow):
             self.btn_snippet_rec.setEnabled(False)
             self.btn_snippet_rec.setChecked(False)
             self.btn_snippet_rec.setIcon(get_icon("rec_off"))
+            self.btn_calibrate.setEnabled(False)
             self.pitch_display.clear_pitch()
             self.statusBar().showMessage("已停止")
 
@@ -741,8 +753,13 @@ class MainWindow(QMainWindow):
         freq, conf = 0.0, 0.0
         if rms_db > -60: # Lowered threshold to -60dB
              # Predict pitch using the tracker. 
-             # IMPORTANT: Disable windowing for YIN (preprocessed_pitch)
-             preprocessed_pitch = self.preprocessor.process(raw_analysis_data, apply_window=False)
+             # IMPORTANT: Disable windowing AND pre-emphasis for YIN. Enable denoise.
+             preprocessed_pitch = self.preprocessor.process(
+                 raw_analysis_data, 
+                 apply_window=False, 
+                 apply_preemph=False, 
+                 apply_denoise=True
+             )
              freq, conf = self.pitch_tracker.predict(preprocessed_pitch)
              
              if freq > 0 and conf > 0.25: # Lowered confidence threshold for YIN
@@ -819,6 +836,17 @@ class MainWindow(QMainWindow):
         """播放片段"""
         self.audio.play_snippet()
         self.statusBar().showMessage("正在播放录制片段...")
+
+    def _calibrate_noise(self):
+        """采样环境底噪"""
+        self.statusBar().showMessage("正在采样环境底噪，请保持安静...")
+        # 获取 500ms 噪声
+        noise_chunk = self.audio.get_buffer(duration_ms=500)
+        if len(noise_chunk) > 0:
+            self.preprocessor.set_noise_profile(noise_chunk)
+            self.statusBar().showMessage("噪声校准完成！降噪功能已开启。", 3000)
+        else:
+            self.statusBar().showMessage("采样失败：未获取到音频数据。")
 
     def _update_pitch_display(self, freq: float, conf: float):
         """Update pitch display with frequency and calculate note info"""
