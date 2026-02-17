@@ -778,44 +778,81 @@ class MainWindow(QMainWindow):
             
             # DEBUG: Real-time analysis log
             if rms_db > -50:
-                print(f"[Perf] RMS={rms_db:.1f}dB Conf={conf:.2f} Freq={freq:.1f}Hz Time={est_time:.2f}s")
+                # Performance profiling (Real-time analysis)
+                # Uncomment to debug input quality
+                # print(f"[Perf] RMS={rms_db:.1f}dB Conf={conf:.2f} Freq={freq:.1f}Hz Time={est_time:.2f}s")
+                
+                # Only log meaningful guitar sounds to console (User Request)
+                if conf > 0.4 and freq > 60:
+                     # print(f"[Detected] Freq={freq:.1f}Hz (Conf={conf:.2f})")
+                     pass 
 
             # 视觉反馈 (Visual Feedback)
-            # LOWERED THRESHOLD FOR DEBUGGING: 0.4 -> 0.01
-            if freq > 0 and conf > 0.01:
+            # Lower threshold to Ensure we try to match even if confidence is mediocre
+            if freq > 0 and conf > 0.1:
                 self._check_note_hit(est_time, freq)
 
     def _check_note_hit(self, time: float, detected_freq: float):
-        """检查当前时间点的音符是否命中"""
+        """检查当前时间点的音符是否命中 (支持八度容差)"""
         active_notes = self.score_follower.get_active_notes(time)
         
-        if not active_notes:
-            print(f"[HitCheck] Time={time:.2f}s | No active notes found.")
-            return
+        # if not active_notes:
+        #     # Silence "No active notes" to reduce spam
+        #     return
 
         import math
         
+        hit_found = False
+        
         for note in active_notes:
+            # Unpack note details
+            # Note: The original note dict might not have 'start', 'dur' if it's just from get_active_notes
+            # Assuming 'pitch' and 'id' are always present.
+            midi_pitch = note.get('pitch')
             note_id = note.get('id')
+            
             if note_id in self.marked_notes:
                 continue
-                
-            midi_pitch = note.get('pitch')
+            
+            # Target Frequency
             target_freq = 440.0 * (2 ** ((midi_pitch - 69) / 12.0))
             
-            # 允许 0.5 半音误差 (approx 3%)
-            # semitone_diff = 12 * log2(f / target)
-            semitone_error = abs(12 * math.log2(detected_freq / target_freq))
+            if target_freq <= 0 or detected_freq <= 0:
+                continue
+                
+            # Semitone Error
+            # semitone_error = 12 * log2(f / target)
+            semitone_error = 12 * math.log2(detected_freq / target_freq)
             
-            # DEBUG: Print detailed error for closest note
-            print(f"[HitCheck] Time={time:.2f}s | Note={midi_pitch} ({target_freq:.1f}Hz) vs Det={detected_freq:.1f}Hz -> Err={semitone_error:.2f} semi")
-
-            if semitone_error < 0.5:
-                # 命中!
+            # Check for direct match or Octave match (Harmonics)
+            # Guitar often triggers 2nd harmonic (1 octave up) or fundamental
+            is_match = False
+            match_type = ""
+            
+            # More generic octave check
+            # Find the closest integer octave difference
+            octave_diff = round(semitone_error / 12.0)
+            # Calculate the residual error within that octave
+            residual = abs(semitone_error - (octave_diff * 12.0))
+            
+            # Allow up to 1 semitone error within the target or octave
+            if residual < 1.0: # 1 semitone tolerance
+                is_match = True
+                if octave_diff == 0: 
+                    match_type = "Direct"
+                else: 
+                    match_type = f"Octave({int(octave_diff)})"
+            
+            if is_match:
+                # Mark hit in score (Visual)
+                # Assuming score_view has a mark_note method that takes note_id and color
                 self.score_view.mark_note(note_id, '#44ff44') # Green
                 self.marked_notes.add(note_id)
                 
-                # 记录得分
+                # Feedback
+                print(f"[HIT] {match_type} | Time={time:.2f}s | Note={midi_pitch} ({target_freq:.1f}Hz) vs Det={detected_freq:.1f}Hz")
+                
+                # Update Session
                 res = self.practice_session.register_hit(note_id)
                 if res:
                     self.label_score.setText(f"得分: {res['score']}")
