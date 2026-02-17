@@ -4,39 +4,67 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Score Viewer</title>
-
-    <!-- Qt WebChannel -->
-    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
-
+    <title>Guitar Pro Score Viewer</title>
     <style>
-        * {
+        body,
+        html {
             margin: 0;
             padding: 0;
-            box-sizing: border-box;
-        }
-
-        body {
-            background: #1e1e2e;
-            color: #e0e0e0;
-            font-family: 'Segoe UI', system-ui, sans-serif;
+            width: 100%;
+            height: 100%;
             overflow: hidden;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
+            background: #ffffff;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         }
 
-        /* ========== 加载层 ========== */
+        /* 
+           参考 ScoreViewer.vue 的结构和样式 
+        */
+        .score-wrapper {
+            width: 100%;
+            height: 100%;
+            /* Ensure full height */
+            flex: 1;
+            overflow-x: hidden;
+            overflow-y: auto;
+            /* Scroll happens here */
+            background: white;
+            box-sizing: border-box;
+            position: relative;
+            /* For markers overlay */
+        }
+
+        .score-container {
+            min-height: 100%;
+            width: 100%;
+            box-sizing: border-box;
+            overflow-x: hidden;
+        }
+
+        .markers-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 5;
+        }
+
+        /* Loading Overlay */
         #loading-overlay {
             position: fixed;
-            inset: 0;
-            background: #1e1e2e;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.95);
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
             z-index: 1000;
-            transition: opacity 0.4s ease;
+            transition: opacity 0.5s;
         }
 
         #loading-overlay.hidden {
@@ -44,400 +72,187 @@
             pointer-events: none;
         }
 
-        .loading-icon {
-            font-size: 64px;
-            margin-bottom: 20px;
-            animation: pulse 1.5s ease-in-out infinite;
+        .spinner {
+            width: 40px;
+            height: 40px;
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
         }
 
-        @keyframes pulse {
+        @keyframes spin {
+            0% {
+                transform: rotate(0deg);
+            }
 
-            0%,
             100% {
-                transform: scale(1);
-                opacity: 0.7;
-            }
-
-            50% {
-                transform: scale(1.1);
-                opacity: 1;
+                transform: rotate(360deg);
             }
         }
 
-        .loading-title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #cdd6f4;
-            margin-bottom: 16px;
+        .loading-text {
+            margin-top: 15px;
+            color: #333;
+            font-size: 14px;
         }
 
-        .loading-status {
-            font-size: 13px;
-            color: #7f849c;
-            margin-bottom: 12px;
-            min-height: 20px;
-        }
-
-        /* 进度条 */
-        .progress-bar-container {
-            width: 280px;
+        .progress-bar {
+            width: 200px;
             height: 4px;
-            background: #313244;
+            background: #eee;
+            margin-top: 10px;
             border-radius: 2px;
             overflow: hidden;
         }
 
-        .progress-bar {
+        .progress-fill {
             height: 100%;
-            background: linear-gradient(90deg, #89b4fa, #74c7ec);
-            border-radius: 2px;
+            background: #3498db;
             width: 0%;
-            transition: width 0.3s ease;
+            transition: width 0.3s;
         }
 
-        /* ========== 占位信息 ========== */
+        /* Placeholder */
         #placeholder {
             position: absolute;
-            inset: 0;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            color: #585b70;
-            z-index: 10;
-            user-select: none;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: #888;
         }
 
         #placeholder.hidden {
             display: none;
         }
 
-        .placeholder-icon {
-            font-size: 72px;
-            margin-bottom: 16px;
-            opacity: 0.6;
-        }
-
-        .placeholder-text {
-            font-size: 16px;
-            text-align: center;
-            line-height: 1.8;
-        }
-
-        .placeholder-hint {
-            font-size: 12px;
-            color: #45475a;
-            margin-top: 8px;
-        }
-
-        /* 拖放高亮 */
-        .drag-over #placeholder {
-            background: rgba(137, 180, 250, 0.05);
-            border: 2px dashed #89b4fa;
-        }
-
-        /* ========== 乐谱容器 ========== */
-        #score-container {
-            flex: 1;
-            width: 100%;
-            overflow-y: auto;
-            overflow-x: auto;
-            background: #ffffff;
-            position: relative;
-        }
-
-        /* AlphaTab 样式覆盖 */
-        .at-surface {
-            background: #ffffff !important;
-        }
-
-        .at-main {
-            background: #ffffff !important;
-        }
-
-        /* 自定义滚动条 */
-        #score-container::-webkit-scrollbar {
-            width: 8px;
-            height: 8px;
-        }
-
-        #score-container::-webkit-scrollbar-track {
-            background: #f0f0f0;
-        }
-
-        #score-container::-webkit-scrollbar-thumb {
-            background: #bbb;
-            border-radius: 4px;
-        }
-
-        #score-container::-webkit-scrollbar-thumb:hover {
-            background: #999;
-        }
-
-        /* ========== 底部信息栏 ========== */
-        #score-info {
-            background: #181825;
-            padding: 4px 12px;
-            font-size: 12px;
-            color: #7f849c;
-            border-top: 1px solid #313244;
-            display: none;
-            gap: 16px;
-            align-items: center;
-            flex-shrink: 0;
-        }
-
-        #score-info.visible {
-            display: flex;
-        }
-
-        .info-item {
-            display: flex;
-            align-items: center;
-            gap: 4px;
-        }
-
-        .info-label {
-            color: #585b70;
-        }
-
-        .info-value {
-            color: #cdd6f4;
-        }
-
-        .info-separator {
-            color: #313244;
-        }
-
-        /* ========== 错误提示 ========== */
-        #error-banner {
-            display: none;
-            background: #45273a;
-            color: #f38ba8;
-            padding: 10px 16px;
-            font-size: 13px;
-            border-bottom: 1px solid #5e3a50;
-            align-items: center;
-            gap: 8px;
-        }
-
-        #error-banner.visible {
-            display: flex;
-        }
-
-        #error-banner .error-dismiss {
-            margin-left: auto;
-            cursor: pointer;
-            background: none;
-            border: 1px solid #f38ba8;
-            color: #f38ba8;
-            padding: 2px 8px;
-            border-radius: 3px;
-            font-size: 11px;
-        }
-
-        #error-banner .error-dismiss:hover {
-            background: rgba(243, 139, 168, 0.1);
-        }
-
-        /* ========== 渲染进度（底部条） ========== */
-        #render-progress {
-            height: 2px;
-            background: #313244;
-            flex-shrink: 0;
-            display: none;
-        }
-
-        #render-progress.visible {
-            display: block;
-        }
-
-        #render-progress-bar {
-            height: 100%;
-            background: linear-gradient(90deg, #a6e3a1, #94e2d5);
-            width: 0%;
-            transition: width 0.2s ease;
-        }
-
-        /* ========== 播放器光标与高亮 ========== */
+        /* AlphaTab Styles copied from ScoreViewer.vue */
         .at-cursor-bar {
-            /* 当前小节背景高亮（可选，太强可能会干扰视线） */
-            background: rgba(255, 255, 0, 0.05);
+            background: rgba(255, 242, 0, 0.2) !important;
+            will-change: left, top, width, height;
         }
 
         .at-cursor-beat {
-            /* 当前拍子高亮：蓝色半透明背景 */
-            background: rgba(64, 168, 255, 0.25);
-            border-radius: 2px;
+            background: #42b883 !important;
+            /* Vue theme green */
+            width: 2px !important;
+            will-change: left, top;
+            z-index: 10;
         }
 
-        .at-highlight {
-            /* 播放过的音符变色（AlphaTab 默认可能不加这个类，取决于配置） */
-            fill: #0078ff;
-            stroke: #0078ff;
+        .at-highlight * {
+            fill: #42b883 !important;
+            stroke: #42b883 !important;
         }
     </style>
+    <!-- QWebChannel shim -->
+    <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
 </head>
 
 <body>
 
-    <!-- 加载层（AlphaTab 初始化中） -->
     <div id="loading-overlay">
-        <div class="loading-icon">🎼</div>
-        <div class="loading-title">正在初始化乐谱引擎...</div>
-        <div class="loading-status" id="loading-status">加载 AlphaTab 核心库</div>
-        <div class="progress-bar-container">
-            <div class="progress-bar" id="loading-progress"></div>
+        <div class="spinner"></div>
+        <div class="loading-text" id="loading-text">正在初始化...</div>
+        <div class="progress-bar">
+            <div class="progress-fill" id="progress-fill"></div>
         </div>
     </div>
 
-    <!-- 错误提示条 -->
-    <div id="error-banner">
-        <span>⚠️</span>
-        <span id="error-message">加载失败</span>
-        <button class="error-dismiss" onclick="dismissError()">关闭</button>
-    </div>
-
-    <!-- 渲染进度条 -->
-    <div id="render-progress">
-        <div id="render-progress-bar"></div>
-    </div>
-
-    <!-- 占位信息 -->
     <div id="placeholder">
-        <div class="placeholder-icon">🎸</div>
-        <div class="placeholder-text">
-            拖放乐谱文件到此处<br>
-            或使用工具栏「📂 打开乐谱」按钮
-        </div>
-        <div class="placeholder-hint">
-            支持格式：GP3 / GP4 / GP5 / GPX / GP / MusicXML / MIDI
-        </div>
+        <h2>拖入乐谱文件开始练习</h2>
+        <p>支持 Guitar Pro (.gp3, .gp4, .gp5, .gpx)</p>
     </div>
 
-    <!-- 乐谱渲染容器 -->
-    <div id="score-container"></div>
-
-    <!-- 底部信息栏 -->
-    <div id="score-info">
-        <span class="info-item">
-            <span class="info-label">曲名:</span>
-            <span class="info-value" id="info-title">--</span>
-        </span>
-        <span class="info-separator">|</span>
-        <span class="info-item">
-            <span class="info-label">艺术家:</span>
-            <span class="info-value" id="info-artist">--</span>
-        </span>
-        <span class="info-separator">|</span>
-        <span class="info-item">
-            <span class="info-value" id="info-tempo">--</span>
-        </span>
-        <span class="info-separator">|</span>
-        <span class="info-item">
-            <span class="info-value" id="info-position">--</span>
-        </span>
-        <span style="margin-left: auto;" class="info-item">
-            <span class="info-label">小节:</span>
-            <span class="info-value" id="info-bar">--</span>
-        </span>
+    <!-- Structure matching ScoreViewer.vue -->
+    <div class="score-wrapper" id="score-wrapper">
+        <div id="score-container" class="score-container"></div>
+        <div class="markers-overlay" id="markers-overlay"></div>
     </div>
 
     <script>
-        // ==== 全局状态 ====
+        // Global variables
         let api = null;
-        let pyBridge = null;
-        let currentZoom = 1.0;
-        let totalBars = 0;
+        let qtBridge = null;
+        const wrapper = document.getElementById('score-wrapper');
+        const container = document.getElementById('score-container');
 
-        // ==== 加载状态管理 ====
-        const LoadState = {
-            LOADING_LIB: 'loading_lib',
-            INIT_ENGINE: 'init_engine',
-            LOADING_SOUNDFONT: 'loading_soundfont',
-            READY: 'ready',
-            ERROR: 'error',
-        };
-
+        // ==== Utils ====
         function setLoadingStatus(text, progress) {
-            const statusEl = document.getElementById('loading-status');
-            const progressEl = document.getElementById('loading-progress');
-            if (statusEl) statusEl.textContent = text;
-            if (progressEl) progressEl.style.width = progress + '%';
+            const txt = document.getElementById('loading-text');
+            const fill = document.getElementById('progress-fill');
+            if (txt) txt.textContent = text;
+            if (fill && progress !== undefined) fill.style.width = `${progress}%`;
         }
 
         function hideLoadingOverlay() {
             const overlay = document.getElementById('loading-overlay');
             if (overlay) {
                 overlay.classList.add('hidden');
-                // 等动画结束后移除 DOM
                 setTimeout(() => overlay.remove(), 500);
             }
         }
 
-        function showError(message) {
-            const banner = document.getElementById('error-banner');
-            const msgEl = document.getElementById('error-message');
-            msgEl.textContent = message;
-            banner.classList.add('visible');
-            notifyPython('error', { message: message });
-        }
+        // ==== Resource Path Logic ====
+        function getResourcePath(type) {
+            // Priority: Local (vendor/alphatab)
+            const localBase = 'vendor/alphatab/';
 
-        function dismissError() {
-            document.getElementById('error-banner').classList.remove('visible');
-        }
+            // We assume local files are now present and correct (1.8.1)
+            // But we can keep CDN as fallback if needed, though for now we enforce local
+            // to ensure offline reliability as per previous user issues.
 
-        // ==== Qt WebChannel 桥接 ====
-        function initBridge() {
-            return new Promise((resolve) => {
-                if (typeof QWebChannel === 'undefined') {
-                    console.warn('QWebChannel not available, running standalone');
-                    resolve(null);
-                    return;
-                }
-                new QWebChannel(qt.webChannelTransport, (channel) => {
-                    pyBridge = channel.objects.bridge;
-                    console.log('Python bridge connected');
-                    resolve(pyBridge);
-                });
-            });
-        }
+            // Note: If running in QWebEngine, relative paths might need 'qrc://' or file:// logic 
+            // but usually relative to the HTML file works if load request comes from there.
+            // HTML is at src/ui/score_viewer.html
+            // vendor is at root... wait.
+            // PROJ_ROOT/src/ui/score_viewer.html
+            // PROJ_ROOT/vendor/alphatab
+            // So path should be ../../vendor/alphatab ?
 
-        // ==== 通知 Python 端 ====
-        function notifyPython(event, data) {
-            if (pyBridge && pyBridge.onJsEvent) {
-                pyBridge.onJsEvent(event, JSON.stringify(data || {}));
+            // Let's verify directory structure.
+            // src/ui/score_viewer.html
+            // src/ui/main_window.py
+            // vendor/alphatab (at project root)
+
+            // So relative path is indeed ../../vendor/alphatab/
+
+            const relativeBase = '../../vendor/alphatab/';
+
+            if (type === 'font') {
+                return relativeBase + 'font/';
+            } else if (type === 'soundfont') {
+                return relativeBase + 'soundfont/sonivox.sf2';
             }
+            return relativeBase;
         }
 
-        // ==== 动态加载 AlphaTab JS ====
+        // ==== Load AlphaTab ====
         function loadAlphaTabScript() {
             return new Promise((resolve, reject) => {
-                setLoadingStatus('加载 AlphaTab 核心库...', 10);
+                setLoadingStatus('加载 AlphaTab 1.8.1 (本地)...', 10);
 
-                // 优先尝试本地文件
-                const localPath = 'vendor/alphatab/alphaTab.min.js';
-                const cdnPath = 'https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.3.1/dist/alphaTab.min.js';
+                // Relative path to vendor from src/ui/score_viewer.html
+                const localPath = '../../vendor/alphatab/alphaTab.min.js';
 
                 const script = document.createElement('script');
                 script.onload = () => {
-                    console.log('[AlphaTab] JS 库加载成功');
+                    console.log('[AlphaTab] Local JS loaded successfully');
                     setLoadingStatus('核心库已就绪', 30);
                     resolve();
                 };
                 script.onerror = () => {
-                    console.warn('[AlphaTab] 本地加载失败，尝试 CDN...');
-                    setLoadingStatus('本地加载失败，尝试在线加载...', 15);
-                    // 回退到 CDN
+                    console.warn("Local load failed, trying CDN fallback...");
+                    // Fallback to CDN just in case
+                    const cdnPath = 'https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.8.1/dist/alphaTab.min.js';
                     const fallback = document.createElement('script');
                     fallback.onload = () => {
-                        console.log('[AlphaTab] CDN JS 库加载成功');
-                        setLoadingStatus('核心库已就绪（在线）', 30);
+                        console.log('[AlphaTab] CDN JS loaded');
+                        setLoadingStatus('核心库已就绪 (CDN)', 30);
                         resolve();
                     };
-                    fallback.onerror = () => {
-                        reject(new Error('AlphaTab JS 加载失败：无法访问本地文件或在线 CDN'));
-                    };
+                    fallback.onerror = () => reject(new Error('Failed to load AlphaTab (Local + CDN)'));
                     fallback.src = cdnPath;
                     document.head.appendChild(fallback);
                 };
@@ -446,39 +261,47 @@
             });
         }
 
-        // ==== 获取资源路径（本地优先，CDN 回退） ====
-        function getResourcePath(type) {
-            const localBase = 'vendor/alphatab/';
-            const cdnBase = 'https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.3.1/dist/';
+        // ==== Python Bridge ====
+        function setupQWebChannel() {
+            new QWebChannel(qt.webChannelTransport, (channel) => {
+                // Python: self.channel.registerObject('bridge', self.bridge)
+                qtBridge = channel.objects.bridge;
+                console.log('[Bridge] Connected to Python');
 
-            // 简单检测：如果 AlphaTab 是从本地加载的就用本地路径
-            // 否则用 CDN 路径
-            const scripts = document.querySelectorAll('script[src]');
-            let isLocal = false;
-            scripts.forEach(s => {
-                if (s.src.includes('vendor/alphatab')) isLocal = true;
+                // Initialize after bridge connection
+                loadAlphaTabScript()
+                    .then(() => {
+                        initAlphaTab();
+                    })
+                    .catch(err => {
+                        console.error(err);
+                        sendEvent('error', { message: err.message });
+                    });
             });
+        }
 
-            if (type === 'font') {
-                return isLocal ? localBase + 'font/' : cdnBase + 'font/';
-            } else if (type === 'soundfont') {
-                return isLocal
-                    ? localBase + 'soundfont/sonivox.sf2'
-                    : cdnBase + 'soundfont/sonivox.sf2';
+        // Helper to send events to Python
+        function sendEvent(event, data) {
+            if (qtBridge) {
+                // Python JsBridge only exposes onJsEvent(event, data_str)
+                // We must serialize data to string
+                qtBridge.onJsEvent(event, JSON.stringify(data || {}));
             }
         }
 
-        // ==== AlphaTab 初始化 ====
+        // ==== Init AlphaTab ====
         function initAlphaTab() {
-            setLoadingStatus('初始化渲染引擎...', 40);
+            if (api) {
+                api.destroy();
+                api = null;
+            }
 
-            const container = document.getElementById('score-container');
-
+            // Matches ScoreViewer.vue settings
             const settings = {
+                // file: '', // Loaded later
                 core: {
                     fontDirectory: getResourcePath('font'),
-                    useWorkers: true,
-                    logLevel: 1, // Warning 级别
+                    useWorkers: true
                 },
                 player: {
                     enablePlayer: true,
@@ -486,251 +309,140 @@
                     enableAnimatedBeatCursor: true,
                     enableElementHighlighting: true,
                     soundFont: getResourcePath('soundfont'),
-                    scrollElement: container,
-                    scrollMode: 'continuous', // 'off' 为翻页滚动，'continuous' 为平滑滚动
-                    scrollSpeed: 300,
-                    scrollOffsetY: -70, // 滚动时的垂直偏移（留出顶部空间）
+                    scrollElement: wrapper, // IMPORTANT: wrapper has overflow-y: auto
+                    scrollSpeed: 10,        // Matches reference (10ms steps? or speed factor?)
+                    scrollOffsetX: 0,
                 },
                 display: {
-                    staveProfile: 'Tab',       // 默认六线谱
-                    scale: currentZoom,
-                    layoutMode: 'Page',        // 默认页面视图
                     resources: {
-                        // 乐谱区域保持白底以确保可读性
-                    }
-                },
-                notation: {
-                    elements: {
-                        scoreTitle: true,
-                        scoreSubTitle: true,
-                        scoreArtist: true,
-                        scoreAlbum: true,
-                        scoreWords: true,
-                        scoreMusic: true,
-                        scoreCopyright: true,
+                        // Ensure font is found
+                        font: getResourcePath('font')
                     }
                 }
             };
 
-            api = new alphaTab.AlphaTabApi(container, settings);
+            console.log("Initializing AlphaTab with settings:", settings);
 
-            // ---- 事件监听 ----
+            try {
+                // Global alphaTab object from window
+                api = new alphaTab.AlphaTabApi(container, settings);
 
-            // 乐谱加载完成
-            api.scoreLoaded.on((score) => {
-                document.getElementById('placeholder').classList.add('hidden');
-                document.getElementById('score-info').classList.add('visible');
-                document.getElementById('info-title').textContent = score.title || '未命名';
-                document.getElementById('info-artist').textContent = score.artist || '未知';
-                document.getElementById('info-tempo').textContent = `♩=${score.tempo}`;
-
-                // 计算总小节数
-                if (score.tracks && score.tracks.length > 0) {
-                    totalBars = score.tracks[0].staves[0].bars.length;
-                    document.getElementById('info-bar').textContent = `1 / ${totalBars}`;
-                }
-
-                notifyPython('scoreLoaded', {
-                    title: score.title,
-                    artist: score.artist,
-                    tempo: score.tempo,
-                    tracks: score.tracks.length,
-                    bars: totalBars,
-                });
-            });
-
-            // 渲染开始/完成
-            api.renderStarted.on(() => {
-                document.getElementById('render-progress').classList.add('visible');
-                document.getElementById('render-progress-bar').style.width = '30%';
-                notifyPython('renderProgress', { progress: 0 });
-            });
-
-            api.renderFinished.on(() => {
-                document.getElementById('render-progress-bar').style.width = '100%';
+                // Signal readiness to Python immediately so it can send commands (like load score)
                 setTimeout(() => {
-                    document.getElementById('render-progress').classList.remove('visible');
-                    document.getElementById('render-progress-bar').style.width = '0%';
-                }, 500);
-                notifyPython('renderProgress', { progress: 100 });
-            });
+                    sendEvent('ready');
+                    // If no file loaded, we should hide overlay to show placeholder
+                    // But we might want to keep it if we expect an immediate load?
+                    // Usually correct to hide it and show "Drop file" placeholder.
+                    hideLoadingOverlay();
+                }, 100);
 
-            // 播放器就绪
-            api.playerReady.on(() => {
-                notifyPython('playerReady', {});
-            });
+                // Events
+                api.scoreLoaded.on((score) => {
+                    console.log('Score loaded:', score.title);
+                    sendEvent('scoreLoaded', {
+                        title: score.title,
+                        artist: score.artist,
+                        tempo: score.tempo,
+                        bars: score.masterBars.length
+                    });
 
-            // 播放完成
-            api.playerFinished.on(() => {
-                notifyPython('playerFinished', {});
-            });
-
-            // 当前拍子变化
-            api.playedBeatChanged.on((beat) => {
-                if (beat && beat.notes) {
-                    const notes = beat.notes.map(n => ({
-                        id: n.id,
-                        fret: n.value,
-                        string: n.string,
-                        startTick: beat.start,
-                        duration: beat.duration,
-                    }));
-
-                    // 更新当前小节号
-                    if (beat.voice && beat.voice.bar) {
-                        const barIdx = beat.voice.bar.index + 1;
-                        document.getElementById('info-bar').textContent = `${barIdx} / ${totalBars}`;
-                    }
-
-                    notifyPython('beatChanged', { notes: notes });
-                }
-            });
-
-            // 播放位置变化
-            api.playerPositionChanged.on((e) => {
-                const pos = `${formatTime(e.currentTime)} / ${formatTime(e.endTime)}`;
-                document.getElementById('info-position').textContent = pos;
-                notifyPython('positionChanged', {
-                    currentTime: e.currentTime,
-                    endTime: e.endTime,
-                    currentTick: e.currentTick,
-                    endTick: e.endTick,
+                    document.getElementById('placeholder').classList.add('hidden');
+                    // Show loading again? Or assume playerReady comes soon?
+                    // AlphaTab usually triggers scoreLoaded then playerReady.
                 });
-            });
 
-            // SoundFont 加载进度
-            api.soundFontLoad.on((e) => {
-                const pct = Math.round((e.loaded / e.total) * 100);
-                setLoadingStatus(`加载音色库... ${pct}%`, 50 + pct * 0.4);
-            });
+                api.playerReady.on(() => {
+                    console.log('Player ready');
+                    // sendEvent('ready'); // Moved up
+                    sendEvent('playerReady');
+                });
 
-            api.soundFontLoaded.on(() => {
-                setLoadingStatus('音色库加载完成', 95);
-            });
-            // 点击跳转播放位置
-            api.beatMouseDown.on((beat) => {
-                if (beat && api.player) {
-                    // 确保使用绝对 tick
-                    const tick = beat.absoluteStart !== undefined ? beat.absoluteStart : beat.start;
+                api.playerFinished.on(() => {
+                    sendEvent('playerFinished');
+                });
 
-                    // console.log(`Seek request: ${tick} (state=${api.player.state})`);
+                api.renderStarted.on(() => {
+                    sendEvent('renderProgress', { progress: 10 });
+                });
 
-                    // 如果正在播放，先暂停，跳转后再恢复，以确保位置同步准确
-                    const wasPlaying = api.player.state === 1;
-                    if (wasPlaying) {
-                        api.player.pause();
-                    }
+                api.renderFinished.on(() => {
+                    sendEvent('renderProgress', { progress: 100 });
+                });
 
-                    api.tickPosition = tick;
-                    api.player.tickPosition = tick;
+                api.playerPositionChanged.on((e) => {
+                    // e: { currentTime, endTime, currentTick, endTick }
+                    sendEvent('positionChanged', {
+                        currentTime: e.currentTime,
+                        endTime: e.endTime,
+                        currentTick: e.currentTick,
+                        endTick: e.endTick
+                    });
+                });
 
-                    if (wasPlaying) {
-                        // 给一点缓冲时间让 synth 处理 seek
-                        setTimeout(() => {
-                            api.player.play();
-                        }, 50);
-                    }
-                }
-            });
+                api.playedBeatChanged.on((beat) => {
+                    // Send beat info
+                    sendEvent('beatChanged', {
+                        start: beat.start,
+                        duration: beat.duration,
+                        index: beat.index
+                    });
+                });
 
-            // 引擎就绪后隐藏加载层
-            api.playerReady.on(() => {
-                setLoadingStatus('准备就绪', 100);
-                setTimeout(hideLoadingOverlay, 300);
-            });
+                api.error.on((e) => {
+                    console.error('AlphaTab error:', e);
+                    sendEvent('error', { message: e.message || 'Unknown error' });
+                });
 
-            // 如果不需要播放器，渲染完成后就隐藏
-            api.renderFinished.on(() => {
-                // 如果加载层还在，延迟隐藏
-                const overlay = document.getElementById('loading-overlay');
-                if (overlay && !overlay.classList.contains('hidden')) {
-                    setTimeout(() => {
-                        if (!overlay.classList.contains('hidden')) {
-                            setLoadingStatus('渲染完成', 100);
-                            setTimeout(hideLoadingOverlay, 300);
-                        }
-                    }, 2000);
-                }
-            });
-
-            // 错误处理
-            api.error.on((e) => {
-                console.error('[AlphaTab] Error:', e);
-                const msg = e.message || e.type || '渲染出错';
-                showError(msg);
-            });
-
-            setLoadingStatus('引擎初始化完成，等待音色库...', 50);
-            console.log('[AlphaTab] 引擎已初始化');
-        }
-
-        function formatTime(ms) {
-            const s = Math.floor(ms / 1000);
-            const m = Math.floor(s / 60);
-            return `${m}:${String(s % 60).padStart(2, '0')}`;
-        }
-
-        // ==== JS API（供 Python 调用） ====
-
-        // 加载乐谱文件（通过 URL）
-        window.loadScore = function (url) {
-            if (!api) return;
-            dismissError();
-            // 本地文件路径转 file:// URL
-            if (url.match(/^[A-Za-z]:\\/)) {
-                url = 'file:///' + url.replace(/\\/g, '/');
-            }
-            try {
-                api.load(url);
             } catch (e) {
-                showError(`加载失败: ${e.message}`);
+                console.error("Error creating AlphaTab API:", e);
+                sendEvent('error', { message: e.message });
+            }
+        }
+
+        // ==== Public API (Called from Python) ====
+
+        // 1. Load File (Base64 or Path? Python reads file and passes bytes usually, or pass path if local allowed)
+        // ScoreView.py `load_file` uses `self.page().runJavaScript(f"loadScoreData('{base64_data}')")` or similar.
+        // Let's check ScoreView.py.. it calls `api.load(data)`.
+
+        // We need to expose helper functions globally for Python to call.
+
+        window.loadScoreData = function (data, isFile = true) {
+            // data can be byte array (from python list) or base64?
+            // Usually AlphaTab auto-detects.
+            if (api) {
+                console.log("Loading score data...");
+                try {
+                    api.load(data);
+                } catch (e) {
+                    console.error("Load failed", e);
+                }
             }
         };
 
-        // 从 Base64 数据加载
-        window.loadScoreData = function (base64Data) {
-            if (!api) return;
-            dismissError();
-            try {
-                const binary = atob(base64Data);
-                const bytes = new Uint8Array(binary.length);
-                for (let i = 0; i < binary.length; i++) {
-                    bytes[i] = binary.charCodeAt(i);
-                }
-                api.load(bytes.buffer);
-            } catch (e) {
-                showError(`数据加载失败: ${e.message}`);
-            }
-        };
-
-        // 播放/暂停
         window.playPause = function () {
             if (api) api.playPause();
         };
 
-        // 停止
         window.stop = function () {
             if (api) api.stop();
         };
 
-        // 设置速度比例
-        window.setPlaybackSpeed = function (speed) {
+        window.setSpeed = function (speed) {
             if (api) api.playbackSpeed = speed;
         };
 
-        // 设置音量
-        window.setMasterVolume = function (vol) {
-            if (api) api.masterVolume = vol;
+        window.goToBar = function (barIndex) {
+            // barIndex is 1-based
+            if (!api || !api.score) return;
+            if (barIndex < 1 || barIndex > api.score.masterBars.length) return;
+
+            const bar = api.score.masterBars[barIndex - 1];
+            api.tickPosition = bar.start;
+            // Also move player?
+            if (api.player) api.player.tickPosition = bar.start;
         };
 
-        // 选择轨道
-        window.setTrack = function (trackIndex) {
-            if (api && api.score && api.score.tracks[trackIndex]) {
-                api.renderTracks([api.score.tracks[trackIndex]]);
-            }
-        };
-
-        // 设置显示模式（Tab / Score / ScoreTab）
         window.setStaveProfile = function (profile) {
             if (api) {
                 api.settings.display.staveProfile = profile;
@@ -739,173 +451,71 @@
             }
         };
 
-        // ---- 新增 API ----
-
-        // 缩放控制（0.5 ~ 2.0）
-        window.setZoom = function (scale) {
-            if (!api) return;
-            scale = Math.max(0.5, Math.min(2.0, scale));
-            currentZoom = scale;
-            api.settings.display.scale = scale;
-            api.updateSettings();
-            api.render();
-            notifyPython('zoomChanged', { zoom: scale });
-        };
-
-        // 获取当前缩放
-        window.getZoom = function () {
-            return currentZoom;
-        };
-
-        // 布局模式切换（Page / Horizontal）
         window.setLayoutMode = function (mode) {
-            if (!api) return;
-            // AlphaTab layoutMode: 0 = Page, 1 = Horizontal
-            let layoutValue;
-            if (mode === 'Horizontal' || mode === 1) {
-                layoutValue = 1;
-            } else {
-                layoutValue = 0; // Page
-            }
-            api.settings.display.layoutMode = layoutValue;
-            api.updateSettings();
-            api.render();
-            notifyPython('layoutModeChanged', { mode: mode });
-        };
-
-        // 小节跳转（1-indexed）
-        window.goToBar = function (barIndex) {
-            if (!api || !api.score) return;
-            if (barIndex < 1 || barIndex > totalBars) return;
-
-            // 通过 AlphaTab 的 API 跳转到指定小节
-            const track = api.score.tracks[0];
-            if (track && track.staves[0] && track.staves[0].bars[barIndex - 1]) {
-                const bar = track.staves[0].bars[barIndex - 1];
-                if (bar.voices[0] && bar.voices[0].beats[0]) {
-                    const beat = bar.voices[0].beats[0];
-                    api.tickPosition = beat.absoluteStart;
-                    document.getElementById('info-bar').textContent = `${barIndex} / ${totalBars}`;
-                }
+            if (api) {
+                api.settings.display.layoutMode = mode; // 'page' or 'horizontal'
+                api.updateSettings();
+                api.render();
             }
         };
 
-        // 获取乐谱信息
-        window.getScoreInfo = function () {
-            if (!api || !api.score) return null;
-            const score = api.score;
-            return {
-                title: score.title,
-                artist: score.artist,
-                tempo: score.tempo,
-                tracks: score.tracks.length,
-                bars: totalBars,
-            };
-        };
-
-        // 标记音符颜色（练习反馈）
-        window.markNote = function (noteId, color) {
-            const noteEl = document.querySelector(`[data-note-id="${noteId}"]`);
-            if (noteEl) {
-                noteEl.style.fill = color;
+        window.zoomIn = function () {
+            if (api) {
+                api.settings.display.scale = (api.settings.display.scale || 1.0) + 0.1;
+                api.updateSettings();
+                api.render();
+                // notify zoom changed?
             }
         };
 
-        // ==== 拖放支持 ====
-        document.addEventListener('dragover', (e) => {
-            e.preventDefault();
+        window.zoomOut = function () {
+            if (api) {
+                api.settings.display.scale = Math.max(0.5, (api.settings.display.scale || 1.0) - 0.1);
+                api.updateSettings();
+                api.render();
+            }
+        };
+
+        window.zoomReset = function () {
+            if (api) {
+                api.settings.display.scale = 1.0;
+                api.updateSettings();
+                api.render();
+            }
+        };
+
+        // ==== Boot ====
+        // Start QWebChannel if available, or just load specific debug mode
+        if (typeof qt !== 'undefined') {
+            setupQWebChannel();
+        } else {
+            // Debug mode without Python
+            console.warn("No QT environment detected. Standalone mode.");
+            loadAlphaTabScript().then(initAlphaTab);
+        }
+
+        // Drag and drop support
+        document.addEventListener('dragover', e => {
             e.stopPropagation();
-            document.body.classList.add('drag-over');
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'copy';
         });
 
-        document.addEventListener('dragleave', (e) => {
-            e.preventDefault();
-            document.body.classList.remove('drag-over');
-        });
-
-        document.addEventListener('drop', async (e) => {
-            e.preventDefault();
+        document.addEventListener('drop', e => {
             e.stopPropagation();
-            document.body.classList.remove('drag-over');
-
+            e.preventDefault();
             const files = e.dataTransfer.files;
             if (files.length > 0) {
                 const file = files[0];
-                // 检查文件扩展名
-                const ext = file.name.split('.').pop().toLowerCase();
-                const supported = ['gp3', 'gp4', 'gp5', 'gpx', 'gp', 'musicxml', 'mxl', 'xml', 'mid', 'midi'];
-                if (!supported.includes(ext)) {
-                    showError(`不支持的文件格式: .${ext}。请使用 GP3/GP4/GP5/GPX/MusicXML/MIDI 格式。`);
-                    return;
-                }
-                try {
-                    const buffer = await file.arrayBuffer();
-                    api.load(buffer);
-                    notifyPython('fileDropped', { name: file.name, size: file.size });
-                } catch (err) {
-                    showError(`文件加载失败: ${err.message}`);
-                }
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    if (api) api.load(e.target.result);
+                };
+                reader.readAsArrayBuffer(file);
             }
         });
 
-        // ==== 键盘快捷键 ====
-        document.addEventListener('keydown', (e) => {
-            if (!api) return;
-
-            switch (e.key) {
-                case ' ':  // 空格：播放/暂停
-                    e.preventDefault();
-                    api.playPause();
-                    break;
-                case '+':  // 放大
-                case '=':
-                    if (e.ctrlKey) {
-                        e.preventDefault();
-                        setZoom(currentZoom + 0.1);
-                    }
-                    break;
-                case '-':  // 缩小
-                    if (e.ctrlKey) {
-                        e.preventDefault();
-                        setZoom(currentZoom - 0.1);
-                    }
-                    break;
-                case '0':  // 重置缩放
-                    if (e.ctrlKey) {
-                        e.preventDefault();
-                        setZoom(1.0);
-                    }
-                    break;
-            }
-        });
-
-        // ==== 启动 ====
-        (async () => {
-            try {
-                await initBridge();
-                setLoadingStatus('加载 AlphaTab 引擎...', 20);
-
-                await loadAlphaTabScript();
-                initAlphaTab();
-                notifyPython('ready', {});
-            } catch (err) {
-                console.error('[启动失败]', err);
-                setLoadingStatus('加载失败', 0);
-                // 显示错误在加载层
-                const overlay = document.getElementById('loading-overlay');
-                if (overlay) {
-                    const title = overlay.querySelector('.loading-title');
-                    const status = overlay.querySelector('.loading-status');
-                    title.textContent = '❌ 初始化失败';
-                    title.style.color = '#f38ba8';
-                    status.textContent = err.message || '请检查网络连接或本地资源';
-                    status.style.color = '#f38ba8';
-                }
-                notifyPython('error', { message: err.message || '初始化失败' });
-            }
-        })();
     </script>
-
 </body>
 
 </html>
