@@ -17,6 +17,9 @@ from PySide6.QtGui import QFont, QColor, QAction, QKeySequence, QIcon
 import pyqtgraph as pg
 
 from src.audio.audio_io import AudioIO
+from src.mir.preprocessor import AudioPreprocessor
+from src.mir.pitch import PitchTracker
+from src.mir.alignment import ScoreFollower
 from src.ui.score_view import ScoreView
 from src.ui.icons import get_icon
 
@@ -234,6 +237,17 @@ class MainWindow(QMainWindow):
 
         # 音频引擎
         self.audio = AudioIO(sample_rate=44100, block_size=256)
+        
+        # 音频预处理 (用于分析)
+        self.preprocessor = AudioPreprocessor(self.audio.sample_rate)
+
+        # 音高检测器 (16kHz usually for CREPE, but we pass full rate and let it handle/resample if needed, or initialized with full rate)
+        # Note: CREPE models are trained on 16kHz. PitchTracker might need to handle resampling if CREPE is used.
+        # Our simple wrapper currently expects 16000 for CREPE.
+        self.pitch_tracker = PitchTracker(sample_rate=self.audio.sample_rate)
+
+        # 乐谱跟随 (对齐)
+        self.score_follower = ScoreFollower(sample_rate=self.audio.sample_rate)
 
         # 构建 UI
         self._build_menubar()
@@ -526,6 +540,7 @@ class MainWindow(QMainWindow):
         self.score_view.renderProgress.connect(self._on_render_progress)
         self.score_view.errorOccurred.connect(self._on_error)
         self.score_view.zoomChanged.connect(self._on_zoom_changed)
+        self.score_view.scoreDataReceived.connect(self._on_score_data_received) # Connect new signal
         splitter.addWidget(self.score_view)
 
         # 下半部：音频分析区域
@@ -649,62 +664,100 @@ class MainWindow(QMainWindow):
 
         sr = self.audio.sample_rate
 
-        # 获取音频数据
+        # 获取音频数据 (原始用于波形绘制)
         waveform_data = self.audio.get_buffer(duration_ms=100)
-        spectrum_data = self.audio.get_buffer(duration_ms=50)
+        
+        # 预处理数据 (用于频谱和分析)
+        # 获取稍长一点的数据以获得更好的频率分辨率
+        raw_analysis_data = self.audio.get_buffer(duration_ms=60)
+        
+        # 使用预处理 (加窗、预加重)
+        preprocessed_data = self.preprocessor.process(raw_analysis_data, apply_window=True)
+        
+        if len(waveform_data) == 0:
+            return
 
-        # 更新波形
+        # 更新波形 (使用原始数据，看起来更直观)
         self.waveform.update_waveform(waveform_data, sr)
 
+        # 更新频谱 (使用预处理后数据，更干净)
+        # 注意: AudioPreprocessing 可能会降采样、加窗，这会改变数据长度和频率对应关系
+        # 我们暂时简单地只取幅度，忽略具体的频率刻度缩放修正，仅展示效果
+        # 如果预处理做了降采样，频谱显示的 X 轴需要调整，这里暂时用原始采样率计算
+        
+        # 为了演示，我们暂时不降采样，或者在 Process 中传参
+        # AudioPreprocessor 默认保留 SR/2 的频率，这里简单处理
+        
         # 更新频谱
-        self.spectrum.update_spectrum(spectrum_data, sr)
+        self.spectrum.update_spectrum(preprocessed_data, sr)
 
         # 更新电平表
         rms_db = self.audio.get_rms_db()
         self.level_meter.setValue(int(max(-80, rms_db)))
 
         # TODO: 集成 MIR 引擎后更新音高显示
-        # 暂时用简单的 FFT 峰值做演示
-        if rms_db > -40:
-            self._simple_pitch_detect(spectrum_data, sr)
+        # 使用 PitchTracker
+        if rms_db > -50:
+             # Predict pitch using the tracker
+             freq, conf = self.pitch_tracker.predict(preprocessed_data)
+             if freq > 0 and conf > 0.4: # Tweak confidence threshold
+                 self._update_pitch_display(freq, conf)
+             else:
+                 self.pitch_display.clear_pitch()
         else:
-            self.pitch_display.clear_pitch()
+             self.pitch_display.clear_pitch()
 
-    def _simple_pitch_detect(self, audio: np.ndarray, sr: int):
-        """简易 FFT 峰值音高检测（临时，后续替换为 CREPE/Basic Pitch）"""
-        if len(audio) < 2048:
-            return
+        # 乐谱跟随 (如果已加载参考特征)
+        if self.score_follower.is_ready:
+            # 使用稍长的分析帧进行 chroma 提取 (e.g. 100ms or 2048 samples)
+            # 这里复用 preprocessed_data (60ms) 可能偏短，但 ChromaExtractor 会自动 padding
+            est_time = self.score_follower.process_frame(preprocessed_data)
+            # TODO: 将 est_time 同步给 ScoreView 光标
+            # print(f"Aligned Time: {est_time:.2f}s")
 
-        windowed = audio[-2048:] * np.hanning(2048)
-        fft = np.fft.rfft(windowed)
-        magnitude = np.abs(fft)
-        freqs = np.fft.rfftfreq(2048, 1.0 / sr)
-
-        # 限制在吉他范围
-        mask = (freqs >= 70) & (freqs <= 1500)
-        if not np.any(mask):
-            return
-
-        masked_mag = magnitude[mask]
-        masked_freq = freqs[mask]
-
-        peak_idx = np.argmax(masked_mag)
-        freq = masked_freq[peak_idx]
-
-        if freq < 70:
-            return
-
-        # 计算音名
-        note_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
-        midi = 69 + 12 * np.log2(freq / 440.0)
+    def _update_pitch_display(self, freq: float, conf: float):
+        """Update pitch display with frequency and calculate note info"""
+        if freq < 20: return
+        
+        # Calculate Note Name and Cents
+        import math
+        # A4 = 440Hz
+        midi = 69 + 12 * math.log2(freq / 440.0)
         note_idx = int(round(midi)) % 12
         octave = int(round(midi)) // 12 - 1
         cents = (midi - round(midi)) * 100
-
+        
+        note_names = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B']
         note_name = f"{note_names[note_idx]}{octave}"
+        
         self.pitch_display.set_pitch(note_name, freq, cents)
 
+    # Removed _simple_pitch_detect as it is replaced by PitchTracker
+
+
     # ==== 乐谱相关 ====
+
+    def _on_score_loaded(self, info: dict):
+        """乐谱加载完成回调"""
+        title = info.get('title', '未知标题')
+        artist = info.get('artist', '未知艺术家')
+        self.statusBar().showMessage(f"乐谱已加载: {title} - {artist}")
+        
+        # 请求获取详细音符数据用于对齐
+        # 延迟一点请求，确保 AlphaTab 完全渲染完毕
+        QTimer.singleShot(500, self.score_view.request_score_data)
+
+    @Slot(dict)
+    def _on_score_data_received(self, data: dict):
+        """接收到乐谱数据 (JS -> Python)"""
+        events = data.get('events', [])
+        print(f"[MainWindow] 收到乐谱数据: {len(events)} 个音符事件")
+        
+        # 将数据加载到 ScoreFollower
+        # event: [startTime, duration, midiPitch]
+        if events:
+            self.score_follower.load_score_from_midi_events(events)
+            self.statusBar().showMessage(f"对齐数据已就绪: {len(events)} 音符")
 
     def _open_score_file(self):
         """打开乐谱文件对话框"""

@@ -287,6 +287,77 @@
             });
         }
 
+        // Expose function to Python to request score data
+        window.requestScoreData = function () {
+            if (!api || !api.score) return;
+            const events = getScoreData(api.score);
+            sendEvent('scoreData', { events: events });
+        };
+
+        function getScoreData(score) {
+            // Extract note events for MIR alignment
+            // Returns array of [startTime, duration, midiPitch]
+            const events = [];
+            const tempo = score.tempo; // BPQ (Beats Per Minute) usually, AlphaTab uses BPM directly in tempomap
+
+            // Iterate master bars
+            for (const masterBar of score.masterBars) {
+                // We need to handle time signatures and tempo changes properly
+                // AlphaTab pre-calculates real-time in .renderTick / .playbackTick usually?
+                // Actually AlphaTab has a 'midiEvents' structure if rendered? 
+                // Let's traverse tracks. For now assume single track or first track.
+            }
+
+            // Better approach: Use AlphaTab's built-in Midi generator or traverse the rendered beats
+            // api.renderer.boundsLookup? 
+            // Let's iterate the first track's staves/beats if available.
+
+            if (score.tracks.length > 0) {
+                const track = score.tracks[0]; // Guitar track
+                for (const stave of track.staves) {
+                    for (const bar of stave.bars) {
+                        for (const voice of bar.voices) {
+                            for (const beat of voice.beats) {
+                                if (beat.isRest) continue;
+
+                                // Calculate absolute time? 
+                                // AlphaTab stores 'playbackStart' (ticks) on beats after layout/rendering?
+                                // Let's check if we can rely on tick-to-time conversion.
+                                const startTick = beat.playbackStart;
+                                const durationTick = beat.durationVal; // value in ticks (960 ppq)
+
+                                // Convert ticks to seconds using api.timeConverter
+                                // api.tickToTime(tick) -> milliseconds
+                                const startTime = api.tickToTime(startTick) / 1000.0;
+                                const duration = api.tickToTime(durationTick) / 1000.0; // Approximation if tempo constant
+                                // Better: (api.tickToTime(start + dur) - api.tickToTime(start))
+                                const endTime = api.tickToTime(startTick + durationTick) / 1000.0;
+                                const durSeconds = endTime - startTime;
+
+                                for (const note of beat.notes) {
+                                    // Calculate MIDI pitch
+                                    // standard tuning: E2 A2 D3 G3 B3 E4
+                                    // E2 = 40
+                                    // AlphaTab note.fret + string_tuning (track.tuning[stringIndex ?])
+                                    // track.tuning is array of base pitches (e.g. [64, 59, 55, 50, 45, 40] for EBGDAE)
+                                    // Note: AlphaTab 1.x tuning is array of ints (midi pitch of open string)
+                                    // note.string is 1-based usually in UI, but model is 1-based?
+                                    // AlphaTab model: note.string (1-based index)
+
+                                    if (note.string <= track.tuning.length) {
+                                        const openStringMidi = track.tuning[track.tuning.length - note.string];
+                                        const midiPitch = openStringMidi + note.fret;
+                                        events.push([startTime, durSeconds, midiPitch]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            return events;
+        }
+
         // Helper to send events to Python
         function sendEvent(event, data) {
             if (qtBridge) {

@@ -39,7 +39,9 @@ class JsBridge(QObject):
     renderProgress = Signal(int)        # 渲染进度 (0-100)
     errorOccurred = Signal(str)         # 错误通知
     zoomChanged = Signal(float)         # 缩放变化
+    zoomChanged = Signal(float)         # 缩放变化
     layoutModeChanged = Signal(str)     # 布局模式变化
+    scoreDataReceived = Signal(dict)    # 乐谱数据 (for MIR)
 
     @Slot(str, str)
     def onJsEvent(self, event: str, data: str):
@@ -75,6 +77,8 @@ class JsBridge(QObject):
         elif event == 'layoutModeChanged':
             mode = parsed.get('mode', 'Page')
             self.layoutModeChanged.emit(mode)
+        elif event == 'scoreData':
+            self.scoreDataReceived.emit(parsed)
 
 
 class ScoreView(QWidget):
@@ -100,6 +104,7 @@ class ScoreView(QWidget):
     errorOccurred = Signal(str)
     zoomChanged = Signal(float)
     layoutModeChanged = Signal(str)
+    scoreDataReceived = Signal(dict)
 
     # 支持的文件格式
     SUPPORTED_EXTENSIONS = {
@@ -157,7 +162,10 @@ class ScoreView(QWidget):
         self.bridge.renderProgress.connect(self.renderProgress.emit)
         self.bridge.errorOccurred.connect(self._on_error)
         self.bridge.zoomChanged.connect(self._on_zoom_changed)
+        self.bridge.zoomChanged.connect(self._on_zoom_changed)
         self.bridge.layoutModeChanged.connect(self._on_layout_mode_changed)
+        self.bridge.scoreDataReceived.connect(self.scoreDataReceived.emit)
+        self.bridge.scoreDataReceived.connect(self.scoreDataReceived.emit)
 
     def _load_html(self):
         """加载 AlphaTab HTML 模板"""
@@ -331,6 +339,10 @@ class ScoreView(QWidget):
             bar_index: 小节编号，从 1 开始
         """
         self._run_js(f"goToBar({bar_index})")
+
+    def request_score_data(self):
+        """请求获取当前乐谱的音符数据 (for MIR)"""
+        self._run_js("requestScoreData()")
 
     def mark_note(self, note_id: int, color: str):
         """标记音符颜色（练习反馈）
