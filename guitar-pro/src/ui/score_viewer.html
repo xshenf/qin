@@ -347,7 +347,8 @@
                                     if (note.string <= track.tuning.length) {
                                         const openStringMidi = track.tuning[track.tuning.length - note.string];
                                         const midiPitch = openStringMidi + note.fret;
-                                        events.push([startTime, durSeconds, midiPitch]);
+                                        // Include note.id
+                                        events.push([startTime, durSeconds, midiPitch, note.id]);
                                     }
                                 }
                             }
@@ -357,6 +358,20 @@
             }
             return events;
         }
+
+        window.markNote = function (noteId, color) {
+            if (!noteId) return;
+            const el = document.getElementById(noteId);
+            if (el) {
+                el.style.fill = color;
+                el.style.stroke = color;
+                const children = el.querySelectorAll('*');
+                for (let i = 0; i < children.length; i++) {
+                    children[i].style.fill = color;
+                    children[i].style.stroke = color;
+                }
+            }
+        };
 
         // Helper to send events to Python
         function sendEvent(event, data) {
@@ -368,6 +383,17 @@
         }
 
         // ==== Init AlphaTab ====
+
+        window.setCursorTime = function (timeInSeconds) {
+            if (!api) return;
+            try {
+                const tick = api.timeToTick(timeInSeconds * 1000);
+                api.tick = tick;
+            } catch (e) {
+                console.error("setCursorTime error:", e);
+            }
+        };
+
         function initAlphaTab() {
             if (api) {
                 api.destroy();

@@ -344,6 +344,10 @@ class ScoreView(QWidget):
         """请求获取当前乐谱的音符数据 (for MIR)"""
         self._run_js("requestScoreData()")
 
+    def set_cursor_time(self, time_seconds: float):
+        """设置光标位置 (用于同步/跟随)"""
+        self._run_js(f"setCursorTime({time_seconds})")
+
     def mark_note(self, note_id: int, color: str):
         """标记音符颜色（练习反馈）
 

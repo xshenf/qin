@@ -248,6 +248,9 @@ class MainWindow(QMainWindow):
 
         # 乐谱跟随 (对齐)
         self.score_follower = ScoreFollower(sample_rate=self.audio.sample_rate)
+        
+        # 练习状态
+        self.marked_notes = set() # 记录已命中的音符ID
 
         # 构建 UI
         self._build_menubar()
@@ -524,6 +527,10 @@ class MainWindow(QMainWindow):
         self.btn_practice.setCheckable(True)
         self.btn_practice.setEnabled(False)
         self.btn_practice.setToolTip("练习模式（需先开启采集）")
+        self.btn_practice.setCheckable(True)
+        self.btn_practice.setEnabled(False)
+        self.btn_practice.setToolTip("练习模式（需先开启采集）")
+        self.btn_practice.clicked.connect(self._toggle_practice)
         toolbar.addWidget(self.btn_practice)
 
         main_layout.addLayout(toolbar)
@@ -697,6 +704,8 @@ class MainWindow(QMainWindow):
 
         # TODO: 集成 MIR 引擎后更新音高显示
         # 使用 PitchTracker
+        # 2. 音高检测
+        freq, conf = 0.0, 0.0
         if rms_db > -50:
              # Predict pitch using the tracker
              freq, conf = self.pitch_tracker.predict(preprocessed_data)
@@ -707,13 +716,42 @@ class MainWindow(QMainWindow):
         else:
              self.pitch_display.clear_pitch()
 
-        # 乐谱跟随 (如果已加载参考特征)
-        if self.score_follower.is_ready:
+        # 3. 乐谱跟随 & 练习反馈
+        if self.score_follower.is_ready and self.btn_practice.isChecked():
             # 使用稍长的分析帧进行 chroma 提取 (e.g. 100ms or 2048 samples)
             # 这里复用 preprocessed_data (60ms) 可能偏短，但 ChromaExtractor 会自动 padding
             est_time = self.score_follower.process_frame(preprocessed_data)
-            # TODO: 将 est_time 同步给 ScoreView 光标
-            # print(f"Aligned Time: {est_time:.2f}s")
+            
+            # 同步给 ScoreView 光标
+            self.score_view.set_cursor_time(est_time)
+            
+            # 视觉反馈 (Visual Feedback)
+            if freq > 0 and conf > 0.4:
+                self._check_note_hit(est_time, freq)
+
+    def _check_note_hit(self, time: float, detected_freq: float):
+        """检查当前时间点的音符是否命中"""
+        active_notes = self.score_follower.get_active_notes(time)
+        
+        import math
+        
+        for note in active_notes:
+            note_id = note.get('id')
+            if note_id in self.marked_notes:
+                continue
+                
+            midi_pitch = note.get('pitch')
+            target_freq = 440.0 * (2 ** ((midi_pitch - 69) / 12.0))
+            
+            # 允许 0.5 半音误差 (approx 3%)
+            # semitone_diff = 12 * log2(f / target)
+            semitone_error = abs(12 * math.log2(detected_freq / target_freq))
+            
+            if semitone_error < 0.5:
+                # 命中!
+                # print(f"Hit! Note: {midi_pitch} Error: {semitone_error:.2f}")
+                self.score_view.mark_note(note_id, '#44ff44') # Green
+                self.marked_notes.add(note_id)
 
     def _update_pitch_display(self, freq: float, conf: float):
         """Update pitch display with frequency and calculate note info"""
@@ -788,6 +826,17 @@ class MainWindow(QMainWindow):
     def _reset_speed(self):
         """重置速度"""
         self.speed_spin.setValue(100)
+
+    def _toggle_practice(self):
+        """切换练习模式"""
+        if self.btn_practice.isChecked():
+            self.statusBar().showMessage("练习模式已开启 - 自动跟随")
+            self.score_follower.reset()
+            self.marked_notes.clear() # 清除命中记录
+            # Reset cursor to start
+            self.score_view.set_cursor_time(0.0)
+        else:
+            self.statusBar().showMessage("练习模式已关闭")
 
     def _set_stave(self, profile: str):
         """谱面模式切换"""

@@ -25,6 +25,12 @@ class OnlineDTW:
         self.current_position = 0  # Frame index in reference
         self.accumulated_cost = np.zeros(self.N) + np.inf
         self.accumulated_cost[0] = 0
+
+    def reset(self):
+        """Reset alignment state to beginning."""
+        self.current_position = 0
+        self.accumulated_cost = np.zeros(self.N) + np.inf
+        self.accumulated_cost[0] = 0
         
     def step(self, live_feature: np.ndarray) -> int:
         """
@@ -158,17 +164,20 @@ class ScoreFollower:
         self.is_ready = True
         print(f"[ScoreFollower] Reference loaded: {len(features)} frames")
         
-    def load_score_from_midi_events(self, events: list[tuple[float, float, int]]):
+    def load_score_from_midi_events(self, events: list):
         """
         Synthesize reference features from a list of note events.
         
         Args:
-            events: List of (start_time, duration, midi_pitch)
+            events: List of (start_time, duration, midi_pitch, note_id)
         """
         if not events:
             return
             
+        self.events = events # Store for feedback lookup
+            
         # 1. Determine total duration
+        # Event might have 3 or 4 elements now
         last_event = max(events, key=lambda x: x[0] + x[1])
         total_duration = last_event[0] + last_event[1]
         
@@ -181,20 +190,43 @@ class ScoreFollower:
         ref_features = np.zeros((n_frames, 12))
         
         # 3. Fill features
-        for start, dur, pitch in events:
-            start_frame = int(start * fps)
-            end_frame = int((start + dur) * fps)
-            chroma_idx = pitch % 12
-            
-            # Simple binary activation
-            # A better approach helps DTW: add harmonics or softer activation
-            ref_features[start_frame:end_frame, chroma_idx] = 1.0
+        for event in events:
+            # Handle variable length tuple (backwards compatibility or new format)
+            if len(event) >= 3:
+                start, dur, pitch = event[0], event[1], event[2]
+                
+                start_frame = int(start * fps)
+                end_frame = int((start + dur) * fps)
+                chroma_idx = pitch % 12
+                
+                # Simple binary activation
+                ref_features[start_frame:end_frame, chroma_idx] = 1.0
             
         # Normalize
         norm = np.linalg.norm(ref_features, axis=1, keepdims=True)
         ref_features = np.divide(ref_features, norm, out=np.zeros_like(ref_features), where=norm > 0)
         
         self.load_score_features(ref_features)
+
+    def get_active_notes(self, time: float) -> list:
+        """Get list of notes active at the given time."""
+        if not hasattr(self, 'events'):
+            return []
+            
+        active = []
+        for event in self.events:
+            # event: [start, dur, pitch, id]
+            if len(event) >= 4:
+                start, dur, pitch, note_id = event
+                if start <= time <= start + dur:
+                    active.append({'start': start, 'dur': dur, 'pitch': pitch, 'id': note_id})
+        return active
+
+
+    def reset(self):
+        """Reset alignment state."""
+        if self.dtw:
+            self.dtw.reset()
 
     def process_frame(self, audio_frame: np.ndarray) -> float:
         """
