@@ -121,6 +121,10 @@
             transform: translate(-50%, -50%);
             text-align: center;
             color: #888;
+            z-index: 100;
+            /* Ensure it is above score-wrapper background */
+            pointer-events: none;
+            /* Allow drag & drop through it */
         }
 
         #placeholder.hidden {
@@ -317,6 +321,8 @@
                     scrollOffsetX: 0,
                 },
                 display: {
+                    layoutMode: 'page', // Default vertical view
+                    staveProfile: 'Tab', // Default to six-line staff
                     resources: {
                         // Ensure font is found
                         font: getResourcePath('font')
@@ -482,6 +488,14 @@
         window.zoomReset = function () {
             if (api) {
                 api.settings.display.scale = 1.0;
+                api.updateSettings();
+                api.render();
+            }
+        };
+
+        window.setZoom = function (scale) {
+            if (api) {
+                api.settings.display.scale = scale;
                 api.updateSettings();
                 api.render();
             }

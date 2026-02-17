@@ -272,7 +272,7 @@ class ScoreView(QWidget):
 
     def set_speed(self, speed: float):
         """设置播放速度 (1.0 = 正常)"""
-        self._run_js(f"setPlaybackSpeed({speed})")
+        self._run_js(f"setSpeed({speed})")
 
     def set_volume(self, volume: float):
         """设置音量 (0.0 ~ 1.0)"""
@@ -298,8 +298,10 @@ class ScoreView(QWidget):
             scale: 0.5 ~ 2.0，1.0 为原始大小
         """
         scale = max(0.5, min(2.0, scale))
-        self._current_zoom = scale
-        self._run_js(f"setZoom({scale})")
+        if self._current_zoom != scale:
+            self._current_zoom = scale
+            self._run_js(f"setZoom({scale})")
+            self.zoomChanged.emit(scale)
 
     def zoom_in(self):
         """放大 10%"""

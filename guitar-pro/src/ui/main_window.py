@@ -13,11 +13,12 @@ from PySide6.QtWidgets import (
     QFileDialog, QSlider, QSpinBox, QMenuBar, QMenu
 )
 from PySide6.QtCore import Qt, QTimer, Signal, Slot
-from PySide6.QtGui import QFont, QColor, QAction, QKeySequence
+from PySide6.QtGui import QFont, QColor, QAction, QKeySequence, QIcon
 import pyqtgraph as pg
 
 from src.audio.audio_io import AudioIO
 from src.ui.score_view import ScoreView
+from src.ui.icons import get_icon
 
 
 class WaveformWidget(pg.PlotWidget):
@@ -381,7 +382,8 @@ class MainWindow(QMainWindow):
         toolbar.setSpacing(6)
 
         # 打开文件
-        self.btn_open = QPushButton("📂 打开")
+        self.btn_open = QPushButton("打开")
+        self.btn_open.setIcon(get_icon("folder"))
         self.btn_open.setToolTip("打开乐谱文件 (Ctrl+O)")
         self.btn_open.clicked.connect(self._open_score_file)
         toolbar.addWidget(self.btn_open)
@@ -389,44 +391,83 @@ class MainWindow(QMainWindow):
         self._add_separator(toolbar)
 
         # 播放控制
-        _icon_btn_style = "font-size: 18px; font-weight: bold;"
-
-        self.btn_play = QPushButton("▶")
+        self.btn_play = QPushButton()
+        self.btn_play.setIcon(get_icon("play"))
         self.btn_play.setToolTip("播放/暂停 (Space)")
-        self.btn_play.setFixedSize(40, 32)
-        self.btn_play.setStyleSheet(_icon_btn_style)
+        self.btn_play.setFixedSize(36, 32)
         self.btn_play.clicked.connect(self._toggle_playback)
         toolbar.addWidget(self.btn_play)
 
-        self.btn_stop = QPushButton("■")
+        self.btn_stop = QPushButton()
+        self.btn_stop.setIcon(get_icon("stop"))
         self.btn_stop.setToolTip("停止")
-        self.btn_stop.setFixedSize(40, 32)
-        self.btn_stop.setStyleSheet(_icon_btn_style)
+        self.btn_stop.setFixedSize(36, 32)
         self.btn_stop.clicked.connect(self._stop_playback)
         toolbar.addWidget(self.btn_stop)
 
-        # 速度
+        # 速度控制：SpinBox + Reset
         toolbar.addWidget(QLabel("速度:"))
-        self.speed_slider = QSlider(Qt.Orientation.Horizontal)
-        self.speed_slider.setMinimum(25)
-        self.speed_slider.setMaximum(200)
-        self.speed_slider.setValue(100)
-        self.speed_slider.setFixedWidth(90)
-        self.speed_slider.setToolTip("播放速度")
-        self.speed_slider.valueChanged.connect(self._on_speed_changed)
-        toolbar.addWidget(self.speed_slider)
-        self.speed_label = QLabel("100%")
-        self.speed_label.setFixedWidth(36)
-        toolbar.addWidget(self.speed_label)
+
+        self.speed_spin = QSpinBox()
+        self.speed_spin.setRange(25, 200)
+        self.speed_spin.setValue(100)
+        self.speed_spin.setSingleStep(5)
+        self.speed_spin.setSuffix("%")
+        self.speed_spin.setFixedWidth(85)
+        self.speed_spin.setToolTip("播放速度 (25% - 200%)")
+        
+        # Base64 SVGs for arrows (fill: #e0e0e0)
+        _arrow_up = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMiIgaGVpZ2h0PSIxMiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjZTBlMGUwIj48cGF0aCBkPSJNNy40MSAxNS40MUwxMiAxMC44M2w0LjU5IDQuNThMMTggMTRsLTYtNi02IDZ6Ii8+PC9zdmc+"
+        _arrow_down = "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSIxMiIgaGVpZ2h0PSIxMiIgdmlld0JveD0iMCAwIDI0IDI0IiBmaWxsPSIjZTBlMGUwIj48cGF0aCBkPSJNNy40MSA4LjU5TDEyIDEzLjE3bDQuNTktNC41OEwxOCAxMGwtNiA2LTYtNnoiLz48L3N2Zz4="
+
+        from pathlib import Path
+        _arrow_dir = Path(__file__).parent / "arrows"
+        _up_path = (_arrow_dir / "up.svg").as_posix()
+        _down_path = (_arrow_dir / "down.svg").as_posix()
+
+        self.speed_spin.setStyleSheet(f"""
+            QSpinBox {{
+                background: #16213e;
+                color: #e0e0e0;
+                border: 1px solid #0f3460;
+                border-radius: 3px;
+                padding: 4px 4px;
+            }}
+            QSpinBox::up-button, QSpinBox::down-button {{
+                width: 24px;
+                border-left: 1px solid #0f3460;
+                background: #16213e; 
+            }}
+            QSpinBox::up-button:hover, QSpinBox::down-button:hover {{
+                background: #1a3a6a;
+            }}
+            QSpinBox::up-arrow {{ 
+                image: url({_up_path});
+                width: 10px; height: 10px;
+            }}
+            QSpinBox::down-arrow {{ 
+                image: url({_down_path});
+                width: 10px; height: 10px;
+            }}
+        """)
+        self.speed_spin.valueChanged.connect(self._on_speed_changed)
+        toolbar.addWidget(self.speed_spin)
+
+        toolbar.addSpacing(6)
+
+        self.btn_speed_reset = QPushButton()
+        self.btn_speed_reset.setIcon(get_icon("reset"))
+        self.btn_speed_reset.setFixedSize(28, 28)
+        self.btn_speed_reset.setToolTip("重置速度 (100%)")
+        self.btn_speed_reset.clicked.connect(self._reset_speed)
+        toolbar.addWidget(self.btn_speed_reset)
 
         self._add_separator(toolbar)
 
         # 缩放
-        _zoom_btn_style = "font-size: 16px; font-weight: bold;"
-
-        self.btn_zoom_out = QPushButton("−")
+        self.btn_zoom_out = QPushButton()
+        self.btn_zoom_out.setIcon(get_icon("zoom_out"))
         self.btn_zoom_out.setFixedSize(32, 32)
-        self.btn_zoom_out.setStyleSheet(_zoom_btn_style)
         self.btn_zoom_out.setToolTip("缩小 (Ctrl+-)")
         self.btn_zoom_out.clicked.connect(self._zoom_out)
         toolbar.addWidget(self.btn_zoom_out)
@@ -436,48 +477,36 @@ class MainWindow(QMainWindow):
         self.zoom_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         toolbar.addWidget(self.zoom_label)
 
-        self.btn_zoom_in = QPushButton("+")
+        self.btn_zoom_in = QPushButton()
+        self.btn_zoom_in.setIcon(get_icon("zoom_in"))
         self.btn_zoom_in.setFixedSize(32, 32)
-        self.btn_zoom_in.setStyleSheet(_zoom_btn_style)
         self.btn_zoom_in.setToolTip("放大 (Ctrl+=)")
         self.btn_zoom_in.clicked.connect(self._zoom_in)
         toolbar.addWidget(self.btn_zoom_in)
 
         self._add_separator(toolbar)
 
-        # 小节跳转
-        toolbar.addWidget(QLabel("小节:"))
-        self.bar_spinbox = QSpinBox()
-        self.bar_spinbox.setMinimum(1)
-        self.bar_spinbox.setMaximum(1)
-        self.bar_spinbox.setFixedWidth(65)
-        self.bar_spinbox.setStyleSheet("""
-            QSpinBox {
-                background: #16213e;
-                color: #e0e0e0;
-                border: 1px solid #0f3460;
-                border-radius: 3px;
-                padding: 2px 4px;
-            }
-        """)
-        toolbar.addWidget(self.bar_spinbox)
-
-        self.btn_go_bar = QPushButton("Go")
-        self.btn_go_bar.setFixedWidth(36)
-        self.btn_go_bar.setToolTip("跳转到指定小节")
-        self.btn_go_bar.clicked.connect(self._go_to_bar)
-        toolbar.addWidget(self.btn_go_bar)
+        # 谱面模式
+        toolbar.addWidget(QLabel("模式:"))
+        self.stave_combo = QComboBox()
+        self.stave_combo.addItems(["六线谱", "五线谱", "五线+六线"])
+        self.stave_combo.setToolTip("选择谱面显示模式")
+        self.stave_combo.setFixedWidth(100)
+        self.stave_combo.currentIndexChanged.connect(self._on_stave_changed)
+        toolbar.addWidget(self.stave_combo)
 
         toolbar.addStretch()
 
         # 采集 / 练习
-        self.btn_record = QPushButton("🎤 采集")
+        self.btn_record = QPushButton("采集")
+        self.btn_record.setIcon(get_icon("record"))
         self.btn_record.setCheckable(True)
         self.btn_record.setToolTip("开始/停止音频采集")
         self.btn_record.clicked.connect(self._toggle_recording)
         toolbar.addWidget(self.btn_record)
 
-        self.btn_practice = QPushButton("🎸 练习")
+        self.btn_practice = QPushButton("练习")
+        self.btn_practice.setIcon(get_icon("practice"))
         self.btn_practice.setCheckable(True)
         self.btn_practice.setEnabled(False)
         self.btn_practice.setToolTip("练习模式（需先开启采集）")
@@ -538,7 +567,7 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(splitter)
 
         # === 状态栏 ===
-        self.statusBar().showMessage("就绪 — 点击 🎤 开始采集 开始")
+        self.statusBar().showMessage("就绪 — 请拖入乐谱文件或点击「打开」...")
 
     @staticmethod
     def _add_separator(layout: QHBoxLayout):
@@ -698,10 +727,14 @@ class MainWindow(QMainWindow):
         self.score_view.stop()
 
     def _on_speed_changed(self, value):
-        """速度滑块变化"""
+        """速度变化"""
         speed = value / 100.0
-        self.speed_label.setText(f"{value}%")
+        # self.speed_label.setText(f"{value}%") # Removed label
         self.score_view.set_speed(speed)
+
+    def _reset_speed(self):
+        """重置速度"""
+        self.speed_spin.setValue(100)
 
     def _set_stave(self, profile: str):
         """谱面模式切换"""
@@ -710,6 +743,13 @@ class MainWindow(QMainWindow):
         self.action_tab.setChecked(profile == "Tab")
         self.action_score.setChecked(profile == "Score")
         self.action_score_tab.setChecked(profile == "ScoreTab")
+        
+        # Sync Combo Box
+        mapping = {"Tab": 0, "Score": 1, "ScoreTab": 2}
+        if profile in mapping:
+            self.stave_combo.blockSignals(True)
+            self.stave_combo.setCurrentIndex(mapping[profile])
+            self.stave_combo.blockSignals(False)
 
     def _set_layout(self, mode: str):
         """布局模式切换"""
@@ -734,10 +774,11 @@ class MainWindow(QMainWindow):
         """缩放变化回调"""
         self.zoom_label.setText(f"{int(zoom * 100)}%")
 
-    def _go_to_bar(self):
-        """跳转到指定小节"""
-        bar = self.bar_spinbox.value()
-        self.score_view.go_to_bar(bar)
+    def _on_stave_changed(self, index):
+        """谱面模式下拉框变化"""
+        profiles = ["Tab", "Score", "ScoreTab"]
+        if 0 <= index < len(profiles):
+            self._set_stave(profiles[index])
 
     def _on_score_loaded(self, info: dict):
         """乐谱加载完成"""
@@ -748,9 +789,7 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"Guitar Pro — {title} - {artist}")
         self.statusBar().showMessage(f"已加载: {title} | {artist} | ♩={tempo} | {bars}小节")
 
-        # 更新小节跳转范围
-        if bars > 0:
-            self.bar_spinbox.setMaximum(bars)
+
 
     def _on_beat_changed(self, data: dict):
         """当前拍子变化（练习模式用）"""
