@@ -419,7 +419,7 @@ const handleScoreReady = (api) => {
     }
   });
   
-  applySettings(); // 应用初始设置
+
   
   // 初始化轨道列表
   if (api.score && api.score.tracks.length > 0) {
@@ -442,37 +442,7 @@ const onTrackChange = () => {
     }
 };
 
-// 应用设置到 AlphaTab API
-const applySettings = () => {
-  const api = scoreViewer.value?.getApi();
-  if (!api) return;
 
-  // 谱面类型映射
-  const staveProfileMap = {
-    'default': 0, // Default (Score + Tab)
-    'score': 2,   // Score only
-    'tab': 3      // Tab only
-  };
-
-  // 应用设置
-  api.settings.display.staveProfile = staveProfileMap[staveProfile.value] || 0;
-  api.settings.display.scale = zoom.value / 100;
-  api.playbackSpeed = playbackSpeed.value / 100;
-  
-  // 始终使用 Page 模式（垂直分页），宽度通过 CSS 控制
-  api.settings.display.layoutMode = 0; // Page
-
-  // 更新设置并重新渲染
-  api.updateSettings();
-  nextTick(() => {
-    api.render();
-  });
-};
-
-// 监听配置变化
-const onStaveProfileChange = () => applySettings();
-const onZoomChange = () => applySettings();
-const onSpeedChange = () => applySettings();
 
 const demoFile = '/gtp/Canon_D.gp5'; 
 console.log("Default Score URL:", demoFile);
@@ -556,7 +526,7 @@ console.log("Default Score URL:", demoFile);
         <!-- 谱面类型 -->
         <div class="tool-group">
           <label class="control-label">谱面</label>
-          <select v-model="staveProfile" @change="onStaveProfileChange" class="compact-select">
+          <select v-model="staveProfile" class="compact-select">
             <option value="default">混合</option>
             <option value="score">五线谱</option>
             <option value="tab">六线谱</option>
@@ -566,7 +536,7 @@ console.log("Default Score URL:", demoFile);
         <!-- 缩放 -->
         <div class="tool-group">
           <label class="control-label">缩放</label>
-          <select v-model.number="zoom" @change="onZoomChange" class="compact-select">
+          <select v-model.number="zoom" class="compact-select">
             <option :value="50">50%</option>
             <option :value="75">75%</option>
             <option :value="100">100%</option>
@@ -579,7 +549,7 @@ console.log("Default Score URL:", demoFile);
         <!-- 播放速度 -->
         <div class="tool-group">
           <label class="control-label">速度</label>
-          <select v-model.number="playbackSpeed" @change="onSpeedChange" class="compact-select">
+          <select v-model.number="playbackSpeed" class="compact-select">
             <option :value="50">50%</option>
             <option :value="75">75%</option>
             <option :value="100">100%</option>
@@ -657,6 +627,9 @@ console.log("Default Score URL:", demoFile);
         v-if="demoFile"
         ref="scoreViewer" 
         :file-url="demoFile"
+        :zoom="zoom"
+        :stave-profile="staveProfile"
+        :playback-speed="playbackSpeed"
         @playerReady="handleScoreReady"
         @playerFinished="isPlaying = false"
       />

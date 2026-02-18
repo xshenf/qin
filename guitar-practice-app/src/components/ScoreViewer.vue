@@ -10,6 +10,18 @@ const props = defineProps({
   fileUrl: {
     type: [String, Object],
     default: ''
+  },
+  zoom: {
+    type: Number,
+    default: 100
+  },
+  staveProfile: {
+    type: String,
+    default: 'default'
+  },
+  playbackSpeed: {
+    type: Number,
+    default: 100
   }
 });
 
@@ -43,6 +55,8 @@ const initAlphaTab = () => {
     },
     display: {
       layoutMode: 0, // Page
+      scale: props.zoom / 100,
+      staveProfile: getStaveProfile(props.staveProfile)
     },
     player: {
       enablePlayer: true,
@@ -59,6 +73,7 @@ const initAlphaTab = () => {
 
   try {
     api = new alphaTab.AlphaTabApi(scoreContainer.value, settings);
+    api.playbackSpeed = props.playbackSpeed / 100;
     console.log("AlphaTab API created successfully");
     
     // Debug events
@@ -204,6 +219,37 @@ watch(
     }
   }
 );
+
+watch(() => props.zoom, (val) => {
+  if (api) {
+    api.settings.display.scale = val / 100;
+    api.updateSettings();
+    api.render();
+  }
+});
+
+watch(() => props.staveProfile, (val) => {
+  if (api) {
+    api.settings.display.staveProfile = getStaveProfile(val);
+    api.updateSettings();
+    api.render();
+  }
+});
+
+watch(() => props.playbackSpeed, (val) => {
+  if (api) {
+    api.playbackSpeed = val / 100;
+  }
+});
+
+const getStaveProfile = (profile) => {
+  const map = {
+    'default': 0, // Default (Score + Tab)
+    'score': 2,   // Score only
+    'tab': 3      // Tab only
+  };
+  return map[profile] || 0;
+};
 
 const renderTrack = (track) => {
   if (!api) return;
