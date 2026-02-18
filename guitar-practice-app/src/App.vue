@@ -55,8 +55,6 @@ let uiInterval = null;
 const togglePractice = () => {
   isPracticeMode.value = !isPracticeMode.value;
   if (isPracticeMode.value) {
-    if (!isMicActive.value) toggleMic(); // 自动开启麦克风
-    
     // Connect pitch callback for PerformanceBar
     PracticeEngine.setPitchCallback((data) => {
         detectedPitchObj.value = data;
@@ -75,6 +73,15 @@ watch(bassBoost, async (newValue) => {
   if (isMicActive.value) {
     await toggleMic(); // 关闭
     await toggleMic(); // 重新开启（会应用新配置）
+  }
+});
+// 监听状态自动开关麦克风
+watch([isPracticeMode, showTuner], ([practice, tuner]) => {
+  const shouldActive = practice || tuner;
+  if (shouldActive && !isMicActive.value) {
+    toggleMic();
+  } else if (!shouldActive && isMicActive.value) {
+    toggleMic();
   }
 });
 
@@ -128,10 +135,6 @@ const toggleMic = async () => {
 
 const toggleTuner = () => {
   showTuner.value = !showTuner.value;
-  // 打开调音器时自动开启麦克风
-  if (showTuner.value && !isMicActive.value) {
-    toggleMic();
-  }
 };
 
 // 全屏切换
@@ -175,11 +178,6 @@ const toggleRecording = async () => {
   if (!isRecording.value) {
     // 开始录音
     try {
-      // 确保麦克风已开启
-      if (!isMicActive.value) {
-        await toggleMic();
-      }
-
       // 音频约束 - 启用降噪和优化
       const constraints = {
         audio: {
@@ -267,6 +265,13 @@ const saveRecording = () => {
   URL.revokeObjectURL(url);
 };
 
+const checkMicStatus = () => {
+    // 恢复麦克风状态（如果应该开启且当前未开启）
+    if ((isPracticeMode.value || showTuner.value) && !isMicActive.value) {
+        toggleMic();
+    }
+};
+
 // 播放/暂停录音
 const togglePlayRecording = async () => {
   if (!recordedAudioUrl.value) return;
@@ -281,12 +286,14 @@ const togglePlayRecording = async () => {
     audioPlayer = new Audio(recordedAudioUrl.value);
     audioPlayer.addEventListener('ended', () => {
       isPlayingRecording.value = false;
+      checkMicStatus();
     });
   }
   
   if (isPlayingRecording.value) {
     audioPlayer.pause();
     isPlayingRecording.value = false;
+    checkMicStatus();
   } else {
     try {
       await audioPlayer.play();
@@ -303,6 +310,7 @@ const stopPlayRecording = () => {
     audioPlayer.pause();
     audioPlayer.currentTime = 0;
     isPlayingRecording.value = false;
+    checkMicStatus();
   }
 };
 
@@ -589,15 +597,7 @@ console.log("Default Score URL:", demoFile);
 
         <!-- 调音器/麦克风组 -->
         <div class="tool-group">
-          <!-- 调音器开关 -->
-          <button 
-            @click="toggleMic" 
-            class="tool-btn"
-            :class="{ active: isMicActive }"
-            title="开启麦克风/调音器"
-          >
-            {{ isMicActive ? '停止调音' : '开始调音' }}
-          </button>
+
           
           <!-- 低音增强开关 (仅在麦克风开启时显示，或者始终显示) -->
           <button 
