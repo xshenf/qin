@@ -39,6 +39,7 @@ const playbackSpeed = ref(100); // 50-200%
 // 自动检测移动端，默认开启低音增强
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 const bassBoost = ref(isMobile);
+const showToolbar = ref(!isMobile);
 
 // 练习模式状态
 const isPracticeMode = ref(false);
@@ -493,11 +494,21 @@ console.log("Default Score URL:", demoFile);
     </div>
 
     <header>
-      <div class="header-left">
-        <h1>🎸 Guitar Practice</h1>
+      <div class="header-bar">
+        <div class="header-left">
+          <h1>🎸 Guitar Practice</h1>
+        </div>
+        <div class="mobile-controls" v-if="isMobile">
+           <button @click="togglePlayback" :class="{ active: isPlaying }">
+            {{ isPlaying ? '⏸' : '▶' }}
+           </button>
+           <button @click="showToolbar = !showToolbar" :class="{ active: showToolbar }">
+             {{ showToolbar ? '🔼' : '🛠️' }}
+           </button>
+        </div>
       </div>
 
-      <div class="toolbar">
+      <div class="toolbar" v-show="!isMobile || showToolbar">
         <!-- 文件加载 -->
         <div class="tool-group">
           <label class="file-btn">
@@ -684,6 +695,18 @@ header {
   z-index: 10;
   border-bottom: 1px solid #2a2a4a;
   flex-shrink: 0;
+}
+
+.header-bar {
+  display: flex;
+  justify-content: flex-start;
+  align-items: center;
+  gap: 20px;
+}
+
+.mobile-controls {
+  display: flex;
+  gap: 8px;
 }
 
 .header-left h1 {
@@ -919,8 +942,14 @@ main.layout-full :deep(.score-container) {
 @media (max-width: 768px) {
   header {
     flex-direction: column;
+    align-items: stretch;
     padding: 8px 10px;
     gap: 8px;
+  }
+
+  .header-bar {
+    justify-content: space-between;
+    width: 100%;
   }
 
   .header-left h1 {

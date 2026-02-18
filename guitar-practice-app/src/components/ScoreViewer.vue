@@ -299,15 +299,14 @@ defineExpose({
 <style>
 /* AlphaTab 全局样式 - 播放高亮 */
 .at-cursor-bar {
-  background: rgba(255, 242, 0, 0.2) !important;
+  background: rgba(33, 33, 168, 0.27) !important;
   will-change: left, top, width, height;
 }
 
 .at-cursor-beat {
-  background: #42b883 !important; /* 使用主题色 */
-  width: 2px !important;
+  background: #0a47a499 !important; /* 使用主题色 */
   will-change: left, top;
-  z-index: 10;
+  z-index: -100;
 }
 
 .at-highlight * {
