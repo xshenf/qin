@@ -61,8 +61,8 @@ const initAlphaTab = () => {
   const settings = {
     file: props.fileUrl || '', // Ensure valid file url is passed
     core: {
-      // Tell AlphaTab where to find fonts (served from public/)
-      fontDirectory: '/font/',
+      // Tell AlphaTab where to find fonts (Use CDN to reduce build size)
+      fontDirectory: 'https://unpkg.com/@coderline/alphatab@1.8.1/dist/font/',
       useWorkers: false
     },
     importer: {
@@ -78,8 +78,9 @@ const initAlphaTab = () => {
       enableCursor: true,
       enableAnimatedBeatCursor: true,
       enableElementHighlighting: true,
-      // Served from public/soundfont/
-      soundFont: '/soundfont/sonivox.sf2',
+      enableElementHighlighting: true,
+      // Use CDN for SoundFont to reduce build size (1.3MB)
+      soundFont: 'https://unpkg.com/@coderline/alphatab@1.8.1/dist/soundfont/sonivox.sf2',
       scrollElement: scoreContainer.value.parentElement,
       scrollSpeed: 10,        // 调整滚动速度 (更小的值 = 更快的动画?) 尝试 100ms
       scrollOffsetX: 0,
