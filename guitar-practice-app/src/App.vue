@@ -35,7 +35,6 @@ let audioPlayer = null; // 音频播放器
 const staveProfile = ref('default'); // default, score, tab
 const zoom = ref(100); // 50-200%
 const playbackSpeed = ref(100); // 50-200%
-const layoutWidth = ref('fit'); // fit, full
 
 // 自动检测移动端，默认开启低音增强
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
@@ -473,7 +472,6 @@ const applySettings = () => {
 const onStaveProfileChange = () => applySettings();
 const onZoomChange = () => applySettings();
 const onSpeedChange = () => applySettings();
-const onWidthChange = () => applySettings();
 
 const demoFile = '/gtp/Canon_D.gp5'; 
 console.log("Default Score URL:", demoFile);
@@ -579,14 +577,6 @@ console.log("Default Score URL:", demoFile);
           </select>
         </div>
 
-        <!-- 宽度模式 -->
-        <div class="tool-group">
-          <label class="control-label">宽度</label>
-          <select v-model="layoutWidth" @change="onWidthChange" class="compact-select">
-            <option value="fit">适应</option>
-            <option value="full">撑满</option>
-          </select>
-        </div>
 
         <!-- 全屏 -->
         <div class="tool-group">
@@ -651,7 +641,7 @@ console.log("Default Score URL:", demoFile);
 
     <PerformanceBar v-if="isPracticeMode" :detectedPitch="detectedPitchObj" />
 
-    <main :class="'layout-' + layoutWidth">
+    <main class="layout-full">
       <ScoreViewer 
         v-if="demoFile"
         ref="scoreViewer" 
