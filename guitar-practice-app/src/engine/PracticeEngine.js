@@ -19,11 +19,15 @@ class PracticeEngine {
 
     // Connect to Score components
     attachScore(scoreApi) {
+        // If re-attaching same score, do nothing? Or should we allow update?
+        if (this.scoreApi === scoreApi) return;
+
         this.scoreApi = scoreApi;
     }
 
     // Start practice loop
     start() {
+        if (this.isPracticeRunning) return; // Prevent double start
         this.isPracticeRunning = true;
         this.noteStatus.clear(); // Clear previous session status
         this.noteStabilizer.clear(); // Clear stabilizer
@@ -169,6 +173,11 @@ class PracticeEngine {
 
     // Called by ScoreViewer when beat changes
     updateExpectedNotes(notes) {
+        if (!this.isPracticeRunning) {
+            this.expectedNotes = []; // Clear if not running to avoid stale checks
+            return;
+        }
+
         console.log("PracticeEngine: expected notes updated", notes.length);
         // Check for missed notes in previous beats
         if (this.expectedNotes && this.expectedNotes.length > 0) {

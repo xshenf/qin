@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import * as alphaTab from '@coderline/alphatab';
 import PracticeEngine from '../engine/PracticeEngine';
 
@@ -31,7 +31,9 @@ const emit = defineEmits([
   'playedBeatChanged',
   'activeBeatsChanged',
   'scoreLoaded',
-  'playerPositionChanged'
+  'scoreLoaded',
+  'playerPositionChanged',
+  'isPlayingChanged'
 ]);
 
 const initAlphaTab = () => {
@@ -39,9 +41,22 @@ const initAlphaTab = () => {
     console.error("ScoreContainer not found!");
     return;
   }
+  // Check if we already initialized for this URL effectively?
+  // But we want to re-init if needed.
+  
   console.log("Initializing AlphaTab...", props.fileUrl);
 
-  if (api) api.destroy();
+  if (api) {
+    try {
+        api.destroy();
+    } catch(e) {
+        console.warn("Cleanup error", e);
+    }
+    // Also remove any existing content in container just in case
+    if (scoreContainer.value) {
+        scoreContainer.value.innerHTML = '';
+    }
+  }
 
   const settings = {
     file: props.fileUrl || '', // Ensure valid file url is passed
@@ -76,27 +91,48 @@ const initAlphaTab = () => {
     api.playbackSpeed = props.playbackSpeed / 100;
     console.log("AlphaTab API created successfully");
     
-    // Debug events
+    // Debug events - commented out to reduce noise
+    /*
     api.error.on((e) => {
       console.error('AlphaTab Error Event:', e);
     });
     api.renderFinished.on(() => {
       console.log('AlphaTab Render Finished');
     });
+    */
   } catch (e) {
     console.error("Error creating AlphaTab API:", e);
   }
 
+  // Attach events
+  
+  // NOTE: AlphaTabApi.on() adds listeners. When we create a NEW api instance,
+  // the old listeners are garbage collected with the old instance (assuming destroy() worked).
+  // However, if destroy() failed or if we bound to something global, we'd have issues.
+  // The 'api' variable is local to this scope but updated in the outer 'api' let var.
+  
   // Events - using correct AlphaTab v1.8 event names
   api.scoreLoaded.on((score) => {
-    console.log('Score loaded:', score.title);
+    // console.log('Score loaded:', score.title);
     emit('scoreLoaded', score);
   });
 
+  api.playerStateChanged.on((args) => {
+    // args.state where 0=Stopped, 1=Playing, 2=Paused
+    // We consider 'Playing' (1) as isPlaying=true.
+    const isPlaying = args.state === 1;
+    emit('isPlayingChanged', isPlaying);
+  });
+
+  let playerReadyTimeout;
   api.playerReady.on(() => {
-    console.log('Player ready');
-    PracticeEngine.attachScore(api); // 连接乐谱API到练习引擎
-    emit('playerReady', api);
+    // Debounce playerReady to prevent multiple fires
+    clearTimeout(playerReadyTimeout);
+    playerReadyTimeout = setTimeout(() => {
+        // console.log('Player ready');
+        PracticeEngine.attachScore(api); 
+        emit('playerReady', api);
+    }, 50);
   });
 
   api.playerFinished.on(() => {
@@ -132,8 +168,14 @@ const markNote = (note, status) => {
   if (!api || !note) return;
   console.log(`Coloring note: ${status}`, note);
   
-  if (!note.ref) {
-      console.warn("Note reference missing");
+  // Determine the actual AlphaTab note object
+  // PracticeEngine passes the raw AlphaTab note object as 'noteRef'
+  // But sometimes it might be wrapped.
+  const noteObj = note.ref ? note.ref : note;
+
+  // Validate it's an object (simple check)
+  if (!noteObj || typeof noteObj !== 'object') {
+     // console.warn("Invalid note object for marking", note);
       return;
   }
 
@@ -147,9 +189,6 @@ const markNote = (note, status) => {
   
   // Let's try to set style on the note.
   try {
-      // Create style if missing. 
-      // We process the note.ref (AlphaTab Note object)
-      const noteObj = note.ref;
       
       // We need alphaTab namespace. 
       // imports are: import * as alphaTab from '@coderline/alphatab';
@@ -179,28 +218,78 @@ const markNote = (note, status) => {
       noteObj.style.colors.set(NoteSubElement.NoteHead, atColor);
       noteObj.style.colors.set(NoteSubElement.Stem, atColor); // also color stem
 
-      // Trigger re-render
-      // We should debounce render if possible, but for now direct call
-      api.render();
+      // Trigger re-render with batching
+      requestRender();
       
   } catch (e) {
       console.error("Error coloring note:", e);
   }
 };
 
+let renderPending = false;
+const requestRender = () => {
+    if (!api || renderPending) return;
+    renderPending = true;
+    requestAnimationFrame(() => {
+        if (api) {
+            api.render();
+        }
+        renderPending = false;
+    });
+};
+
 onMounted(() => {
+  console.log("ScoreViewer Mounted");
   initAlphaTab();
+});
+
+onUnmounted(() => {
+  console.log("ScoreViewer Unmounted");
+  if (api) {
+        try {
+            api.destroy();
+        } catch (e) {
+            console.warn("Error destroying AlphaTab:", e);
+        }
+        api = null;
+    }
 });
 
 // ...
 
 // Expose methods
-const playPause = () => api?.playPause();
-const stop = () => api?.stop();
+const playPause = () => {
+  if (!api || !api.player) return;
+  
+  try {
+      // Check audio context state if possible (though AlphaTab hides it mostly)
+      // Just wrap in try-catch to be safe
+      api.playPause();
+  } catch (e) {
+      console.warn("Play/Pause error:", e);
+  }
+};
+
+const stop = () => {
+    if (!api || !api.player) return;
+    try {
+        api.pause();
+        api.tickPosition = 0; 
+    } catch (e) {
+        console.warn("Error stopping player:", e);
+    }
+};
+
 const getApi = () => api;
 // ...
 const loadFile = (file) => {
   if (!api) return;
+  
+  // Stop player before loading new file to avoid conflicts
+  try {
+      api.pause();
+  } catch(e) {}
+  
   const reader = new FileReader();
   reader.onload = (e) => {
     if (e.target?.result) {
@@ -215,6 +304,11 @@ watch(
   (newUrl) => {
     if (newUrl && api) {
       console.log("Loading new file from watch:", newUrl);
+      try {
+        api.pause();
+      } catch (e) {
+        // Ignore parsing errors or if user wasn't playing
+      }
       api.load(newUrl);
     }
   }

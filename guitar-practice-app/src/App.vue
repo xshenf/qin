@@ -387,7 +387,7 @@ const handleDrop = (e) => {
 const togglePlayback = () => {
   if (scoreViewer.value) {
     scoreViewer.value.playPause();
-    isPlaying.value = !isPlaying.value;
+    // Do not toggle isPlaying here manually, wait for event from component
   }
 };
 
@@ -632,6 +632,7 @@ console.log("Default Score URL:", demoFile);
         :playback-speed="playbackSpeed"
         @playerReady="handleScoreReady"
         @playerFinished="isPlaying = false"
+        @isPlayingChanged="(playing) => isPlaying = playing"
       />
     </main>
 
