@@ -46,6 +46,10 @@ const isPracticeMode = ref(false);
 const tempoFeedback = ref('--');
 const feedbackColor = ref('#888');
 
+// 乐器（轨道）选择
+const tracks = ref([]);
+const selectedTrackIndex = ref(0);
+
 let uiInterval = null;
 
 const togglePractice = () => {
@@ -408,6 +412,26 @@ const handleScoreReady = (api) => {
   });
   
   applySettings(); // 应用初始设置
+  
+  // 初始化轨道列表
+  if (api.score && api.score.tracks.length > 0) {
+    tracks.value = api.score.tracks.map((t, i) => ({
+      index: i,
+      name: t.name || `Instrument ${i + 1}`,
+      instrument: t
+    }));
+    // 默认选中第一轨（通常是主旋律或吉他1）
+    selectedTrackIndex.value = 0;
+  } else {
+    tracks.value = [];
+  }
+};
+
+// 监听轨道切换
+const onTrackChange = () => {
+    if (scoreViewer.value) {
+        scoreViewer.value.renderTrack(selectedTrackIndex.value);
+    }
 };
 
 // 应用设置到 AlphaTab API
@@ -500,6 +524,16 @@ console.log("Default Score URL:", demoFile);
                <span class="value" :style="{ color: feedbackColor }">{{ tempoFeedback }}</span>
              </div>
           </div>
+        </div>
+
+        <!-- 乐器选择 -->
+        <div class="tool-group" v-if="tracks.length > 1">
+          <label class="control-label">乐器</label>
+          <select v-model="selectedTrackIndex" @change="onTrackChange" class="compact-select" style="max-width: 120px;">
+            <option v-for="track in tracks" :key="track.index" :value="track.index">
+              {{ track.name }}
+            </option>
+          </select>
         </div>
 
         <!-- 谱面类型 -->

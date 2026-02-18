@@ -198,6 +198,28 @@ watch(
     }
   }
 );
+
+const renderTrack = (track) => {
+  if (!api) return;
+  console.log("Rendering track:", track);
+  // AlphaTab API: renderTracks accepts an array of track objects or track indexes?
+  // Documentation says: renderTracks(tracks: Track[])
+  // So we need to pass the track object(s) we want to render.
+  // If track is an index, we get it from api.score.tracks
+  
+  let targetTracks = [];
+  if (typeof track === 'number') {
+      if (api.score && api.score.tracks && api.score.tracks[track]) {
+          targetTracks = [api.score.tracks[track]];
+      }
+  } else if (typeof track === 'object') {
+      targetTracks = [track];
+  }
+  
+  if (targetTracks.length > 0) {
+      api.renderTracks(targetTracks);
+  }
+};
 // ...
 
 // Expose methods
@@ -206,7 +228,8 @@ defineExpose({
   stop,
   loadFile,
   getApi,
-  markNote
+  markNote,
+  renderTrack
 });
 </script>
 
