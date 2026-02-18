@@ -36,7 +36,13 @@ const initAlphaTab = () => {
     core: {
       // Tell AlphaTab where to find fonts (served from public/)
       fontDirectory: '/font/',
-      useWorkers: true 
+      useWorkers: false
+    },
+    importer: {
+      encoding: 'gbk'
+    },
+    display: {
+      layoutMode: 0, // Page
     },
     player: {
       enablePlayer: true,
