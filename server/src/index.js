@@ -3,12 +3,14 @@ const express = require('express');
 console.log('express loaded');
 const cors = require('cors');
 console.log('cors loaded');
+let initDb, authRoutes, adminRoutes;
+
 try {
-    const { initDb } = require('./db');
+    ({ initDb } = require('./db'));
     console.log('db loaded');
-    const authRoutes = require('./routes/auth');
+    authRoutes = require('./routes/auth');
     console.log('authRoutes loaded');
-    const adminRoutes = require('./routes/admin');
+    adminRoutes = require('./routes/admin');
     console.log('adminRoutes loaded');
     require('dotenv').config();
     console.log('dotenv loaded');

@@ -14,7 +14,7 @@
 </template>
 
 <script setup>
-import { useAuthStore } from '../src/stores/auth';
+import { useAuthStore } from '@/stores/auth';
 
 const authStore = useAuthStore();
 

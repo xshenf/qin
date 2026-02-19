@@ -49,11 +49,6 @@ export default defineConfig(({ command }) => {
     },
     build: {
       rollupOptions: {
-        placeholder: 'placeholder', // workaround for multi_replace requiring non-empty match
-        input: {
-          main: 'index.html',
-          admin: 'admin/index.html'
-        },
         external: ['vue', '@coderline/alphatab'],
         output: {
           globals: {
@@ -65,7 +60,7 @@ export default defineConfig(({ command }) => {
     },
     server: {
       host: '0.0.0.0',
-      port: 5173,
+      port: 5175,
       // https: {} // Remove https for now to avoid complexity if not needed, or keep if basicSsl is used
     }
   };
