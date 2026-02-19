@@ -9,20 +9,34 @@ const crypto = require('crypto');
 // Secret key for JWT
 const JWT_SECRET = process.env.JWT_SECRET || 'your_secret_key';
 
-// Mock Email Sender (Logs to console)
+// Email Sender
+const transporter = nodemailer.createTransport({
+    host: process.env.SMTP_HOST,
+    port: process.env.SMTP_PORT,
+    secure: process.env.SMTP_SECURE === 'true', // true for 465, false for other ports
+    auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+    },
+});
+
 const sendVerificationEmail = async (email, token) => {
     const verificationLink = `http://localhost:3000/api/auth/verify-email?token=${token}`;
-    console.log('---------------------------------------------------');
-    console.log(`[EMAIL MOCK] To: ${email}`);
-    console.log(`[EMAIL MOCK] Subject: Verify your email`);
-    console.log(`[EMAIL MOCK] Link: ${verificationLink}`);
-    console.log('---------------------------------------------------');
 
-    // In production, use nodemailer with real credentials
-    /*
-    const transporter = nodemailer.createTransport({ ... });
-    await transporter.sendMail({ ... });
-    */
+    try {
+        const info = await transporter.sendMail({
+            from: `"Guitar Practice App" <${process.env.SMTP_USER}>`,
+            to: email,
+            subject: "Verify your email",
+            text: `Please verify your email by clicking the following link: ${verificationLink}`,
+            html: `<p>Please verify your email by clicking the following link:</p><p><a href="${verificationLink}">${verificationLink}</a></p>`,
+        });
+        console.log("Message sent: %s", info.messageId);
+    } catch (error) {
+        console.error("Error sending email:", error);
+        // We don't throw here to avoid failing the registration if email service is down
+        // In a production app, you might want to handle this differently (e.g., retry queue)
+    }
 };
 
 // Register
