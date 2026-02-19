@@ -11,6 +11,7 @@ export default defineConfig({
         }
     },
     server: {
-        port: 5174 // Different port from main app
+        host: true,
+        port: 5178 // Different port from main app
     }
 })
