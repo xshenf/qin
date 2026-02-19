@@ -15,8 +15,14 @@ export default defineConfig(({ command }) => {
         return html.replace(
           '</head>',
           `
-          <script src="https://unpkg.com/vue@3.5.13/dist/vue.global.prod.js"></script>
-          <script src="https://unpkg.com/@coderline/alphatab@1.8.1/dist/alphaTab.min.js"></script>
+          <script type="importmap">
+            {
+              "imports": {
+                "vue": "https://unpkg.com/vue@3.5.13/dist/vue.esm-browser.prod.js",
+                "@coderline/alphatab": "https://unpkg.com/@coderline/alphatab@1.8.1/dist/alphaTab.mjs"
+              }
+            }
+          </script>
           </head>`
         )
       }
