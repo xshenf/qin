@@ -1,0 +1,26 @@
+{
+    "name": "guitar-practice-app-server",
+    "version": "1.0.0",
+    "description": "Backend for Guitar Practice App",
+    "main": "src/index.js",
+    "scripts": {
+        "start": "node src/index.js",
+        "dev": "nodemon src/index.js"
+    },
+    "keywords": [],
+    "author": "",
+    "license": "ISC",
+    "dependencies": {
+        "bcrypt": "^5.1.1",
+        "cors": "^2.8.6",
+        "dotenv": "^16.6.1",
+        "express": "^4.22.1",
+        "jsonwebtoken": "^9.0.3",
+        "nodemailer": "^6.10.1",
+        "sequelize": "^6.37.7",
+        "sqlite3": "^5.1.7"
+    },
+    "devDependencies": {
+        "nodemon": "^3.1.0"
+    }
+}
