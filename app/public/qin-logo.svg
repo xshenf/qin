@@ -1,0 +1,25 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg-gradient" x1="0" y1="0" x2="512" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#16213e" />
+      <stop offset="100%" stop-color="#1a1a2e" />
+    </linearGradient>
+    <linearGradient id="gold-gradient" x1="100" y1="100" x2="400" y2="400" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#FFD700" />
+      <stop offset="100%" stop-color="#DAA520" />
+    </linearGradient>
+  </defs>
+  
+  <rect width="512" height="512" rx="100" fill="url(#bg-gradient)" />
+  
+  <!-- Stylized Guitar Body / Q Shape -->
+  <path d="M256 80C158.8 80 80 158.8 80 256C80 353.2 158.8 432 256 432C353.2 432 432 353.2 432 256C432 158.8 353.2 80 256 80ZM256 392C180.9 392 120 331.1 120 256C120 180.9 180.9 120 256 120C331.1 120 392 180.9 392 256C392 331.1 331.1 392 256 392Z" fill="url(#gold-gradient)" opacity="0.8"/>
+  
+  <!-- Strings -->
+  <path d="M236 120V392" stroke="#42b883" stroke-width="8" stroke-linecap="round"/>
+  <path d="M256 120V392" stroke="#42b883" stroke-width="8" stroke-linecap="round"/>
+  <path d="M276 120V392" stroke="#42b883" stroke-width="8" stroke-linecap="round"/>
+  
+  <!-- Q Tail / Pick shape -->
+  <path d="M340 340L400 400" stroke="url(#gold-gradient)" stroke-width="30" stroke-linecap="round" />
+</svg>

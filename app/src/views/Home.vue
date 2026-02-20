@@ -515,7 +515,7 @@ onUnmounted(() => {
     <header>
       <div class="header-bar">
         <div class="header-left" @click="closeScore" style="cursor: pointer;" title="返回首页">
-          <h1>🎸 Qin</h1>
+          <img src="/qin-logo.svg" alt="Qin Logo" class="app-logo" />
         </div>
         <div class="mobile-controls" v-if="isMobile">
            <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded">
@@ -764,11 +764,25 @@ header {
   gap: 8px;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
 .header-left h1 {
-  font-size: 1rem;
+  font-size: 1.2rem;
   margin: 0;
   color: #42b883;
   white-space: nowrap;
+  font-weight: 700;
+}
+
+.app-logo {
+  height: 32px;
+  width: 32px;
+  border-radius: 6px;
 }
 
 .toolbar {

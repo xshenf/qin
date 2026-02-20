@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { soundFontUrl } from '../utils/soundFont';
+import { FONT_DIRECTORY } from '../config/alphaTabConfig';
 import * as alphaTab from '@coderline/alphatab';
 import PracticeEngine from '../engine/PracticeEngine';
 
@@ -64,7 +65,7 @@ const initAlphaTab = () => {
 
     core: {
       // Tell AlphaTab where to find fonts (Use CDN to reduce build size)
-      fontDirectory: 'https://unpkg.com/@coderline/alphatab@1.8.1/dist/font/',
+      fontDirectory: FONT_DIRECTORY,
       useWorkers: false
     },
     importer: {

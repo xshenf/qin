@@ -1,7 +1,8 @@
 import { ref } from 'vue';
+import { SOUND_FONT_URL } from '../config/alphaTabConfig';
 
 // Default remote URL
-const DEFAULT_SOUND_FONT_URL = 'https://unpkg.com/@coderline/alphatab@1.8.1/dist/soundfont/sonivox.sf2';
+const DEFAULT_SOUND_FONT_URL = SOUND_FONT_URL;
 
 // Reactive URL - starts with default, updates to blob URL when loaded
 export const soundFontUrl = ref(DEFAULT_SOUND_FONT_URL);
