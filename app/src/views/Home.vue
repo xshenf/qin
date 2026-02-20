@@ -1028,12 +1028,12 @@ main.layout-full :deep(.score-container) {
   .toolbar {
     width: 100%;
     flex-wrap: wrap;
-    gap: 6px;
-    justify-content: space-between;
+    gap: 8px;
+    justify-content: flex-start;
   }
 
   .tool-group {
-    padding: 0 4px;
+    padding: 0;
     border-right: none;
   }
 
@@ -1044,6 +1044,7 @@ main.layout-full :deep(.score-container) {
   .compact-select {
     font-size: 0.75rem;
     padding: 4px 6px;
+    max-width: 90px;
   }
 
   button {
@@ -1056,6 +1057,11 @@ main.layout-full :deep(.score-container) {
   .file-btn {
     font-size: 0.75rem;
     padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    box-sizing: border-box;
   }
 
   .monitor {
@@ -1083,7 +1089,7 @@ main.layout-full :deep(.score-container) {
   }
 
   .strings {
-    grid-template-columns: repeat(3, 1fr); /* 移动端分2行显示 */
+    grid-template-columns: repeat(2, 1fr); /* 移动端分2列显示更合理 */
   }
 
   .detected-pitch {
@@ -1101,8 +1107,9 @@ main.layout-full :deep(.score-container) {
   }
 
   button, .file-btn {
-    padding: 8px;
+    padding: 6px 8px;
     font-size: 0.7rem;
+    min-height: 38px;
   }
 
   .compact-select {
@@ -1112,12 +1119,41 @@ main.layout-full :deep(.score-container) {
 
   /* 更紧凑的工具栏 */
   .toolbar {
-    gap: 4px;
+    gap: 6px;
   }
 
   .tool-group {
-    flex: 1;
-    min-width: fit-content;
+    flex: 1 1 auto;
+    min-width: auto;
+    display: flex;
+    justify-content: center;
+  }
+  
+  .tool-group > * {
+    width: 100%;
+    text-align: center;
+  }
+
+  .empty-state {
+    padding: 20px;
+  }
+  
+  .hero-section {
+    margin-bottom: 30px;
+  }
+  
+  .hero-icon {
+    font-size: 3rem;
+    margin-bottom: 10px;
+  }
+  
+  .hero-section h2 {
+    font-size: 1.5rem;
+  }
+  
+  .hero-section p {
+    font-size: 0.95rem;
+    margin-bottom: 20px;
   }
 }
 
@@ -1180,7 +1216,7 @@ main.layout-full :deep(.score-container) {
     padding-top: 45px;
   }
 }
-/* Empty State Styles */
+
 /* Empty State Styles */
 .layout-full {
   flex: 1;
@@ -1200,10 +1236,12 @@ main.layout-full :deep(.score-container) {
   display: flex;
   flex-direction: column;
   align-items: center;
-  justify-content: center;
+  /* 用 flex-start + margin: auto 来替代 justify-content: center，防止溢出时顶部被截断 */
+  justify-content: flex-start;
   padding: 40px;
   box-sizing: border-box;
   background: #1a1a2e;
+  overflow-y: auto;
 }
 
 .score-viewer-layer {
@@ -1215,6 +1253,7 @@ main.layout-full :deep(.score-container) {
 .hero-section {
   text-align: center;
   margin-bottom: 60px;
+  margin-top: auto; /* 配合 flex-start 垂直居中 */
 }
 
 .hero-icon {
@@ -1259,6 +1298,7 @@ main.layout-full :deep(.score-container) {
   gap: 20px;
   width: 100%;
   max-width: 900px;
+  margin-bottom: auto; /* 配合 flex-start 垂直居中 */
 }
 
 .info-card {
