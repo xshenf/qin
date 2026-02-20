@@ -59,13 +59,21 @@ let uiInterval = null;
 const togglePractice = () => {
   isPracticeMode.value = !isPracticeMode.value;
   if (isPracticeMode.value) {
+    if (isPlaying.value) {
+      // 暂停正规播放，进入跟随
+      scoreViewer.value?.playPause();
+      isPlaying.value = false;
+    }
+
     // Connect pitch callback for PerformanceBar
     PracticeEngine.setPitchCallback((data) => {
         detectedPitchObj.value = data;
     });
     
+    PracticeEngine.setFollowMode(true);
     PracticeEngine.start();
   } else {
+    PracticeEngine.setFollowMode(false);
     PracticeEngine.stop();
     detectedPitchObj.value = null; // Clear bar
     tempoFeedback.value = '--';
@@ -670,10 +678,10 @@ onUnmounted(() => {
             @click="togglePractice" 
             class="tool-btn" 
             :class="{ active: isPracticeMode }"
-            title="开启智能练习模式"
+            title="开启智能练习/跟随模式"
             :disabled="!isScoreLoaded"
           >
-            {{ isPracticeMode ? '🎯 练习中' : '🎯 练习' }}
+            {{ isPracticeMode ? '🎯 练习/跟随中' : '🎯 练习/跟随' }}
           </button>
           
           <div class="monitor" v-if="isPracticeMode">

@@ -8,6 +8,7 @@ class PracticeEngine {
         this.onNoteResult = null; // Callback for UI updates
         this.lastHitTime = 0;
         this.expectedNotes = [];
+        this.isFollowMode = false;
 
         // 音符稳定器：过滤瞬态噪声和泛音伪影
         this.noteStabilizer = new Map(); // noteName -> { count, lastFrame, data }
@@ -38,6 +39,11 @@ class PracticeEngine {
     stop() {
         this.isPracticeRunning = false;
         this.expectedNotes = [];
+    }
+
+    setFollowMode(active) {
+        this.isFollowMode = active;
+        console.log("PracticeEngine Follow Mode:", active);
     }
 
     setResultCallback(callback) {
@@ -141,8 +147,22 @@ class PracticeEngine {
 
                         // Tolerance: +/- 0.6 semitone (approx 3.5% freq difference)
                         const diffRatio = detectedFreq / expectedFreq;
+
+                        // Default strict tolerance
+                        let minRatio = 0.965; // ~ -0.6 semitone
+                        let maxRatio = 1.035; // ~ +0.6 semitone
+
+                        // In Follow Mode, we use extremely fuzzy matching.
+                        // If they play *any* clear pitch, we assume they are trying to progress 
+                        // and we just follow along to the next beat. 
+                        // We set tolerance to +/- 12 semitones (a full octave in any direction)
+                        if (this.isFollowMode) {
+                            minRatio = 0.5; // -12 semitones
+                            maxRatio = 2.0; // +12 semitones
+                        }
+
                         // 0.6 semitone ratio is approx 1.035
-                        if (diffRatio > 0.965 && diffRatio < 1.035) {
+                        if (diffRatio > minRatio && diffRatio < maxRatio) {
                             // HIT!
                             this.handleNoteHit(note, currentTick);
                         }
@@ -173,6 +193,18 @@ class PracticeEngine {
                 noteRef: note.ref,
                 timing: timing
             });
+        }
+
+        // Follow Mode Logic: If all notes in current beat are hit, advance tick
+        if (this.isFollowMode && this.scoreApi && this.expectedNotes.length > 0) {
+            const allHit = this.expectedNotes.every(n => this.noteStatus.get(n.id) === 'hit');
+            if (allHit) {
+                // Calculate next beat tick (start + duration of the current beat notes)
+                // We use a small epsilon offset to ensure we step into the NEXT beat properly
+                const beatEndTick = this.expectedNotes[0].startTick + this.expectedNotes[0].duration;
+                console.log(`Follow Mode: All notes hit! Advancing to tick ${beatEndTick}`);
+                this.scoreApi.tickPosition = beatEndTick;
+            }
         }
     }
 
