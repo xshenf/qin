@@ -243,11 +243,27 @@ class PracticeEngine {
                 // Clear expectedNotes so the loop will immediately fetch the next ones for the new tick
                 this.expectedNotes = [];
 
-                // Force a player update/seek so the UI actually scrolls if out of bounds
-                // Often 'tickPosition' assignment handles UI but in paused state it may not scroll.
-                if (this.scoreApi.player && this.scoreApi.player.state === 0) { // 0 represents Paused/Stopped in most AlphaTab versions
-                    // Trigger a mock play/pause or just force UI layout
-                    // this.scoreApi.playPause(); setTimeout(() => this.scoreApi.playPause(), 10);
+                try {
+                    if (this.scoreApi.player && this.scoreApi.player.state !== 1) { // 1 = Playing
+                        // 强制更新视图
+                        this.scoreApi.render();
+
+                        // 由于处于暂停状态，为了让页面滚动，我们还需要手动触发一下 playedBeatChanged 事件
+                        // 这能让外部组件（如 ScoreViewer）知道目前进度变了（并去调用其内部的各种滚动和染色逻辑）
+                        // 在此我们只能寄希望于 tickPosition 已经成功修改内部状态。
+
+                        // 作为一个备用极端的 Hack：短暂地用极低的前端体积播放再暂停
+                        this.scoreApi.playbackSpeed = 0.01;
+                        this.scoreApi.playPause();
+                        setTimeout(() => {
+                            if (this.scoreApi.player && this.scoreApi.player.state === 1) {
+                                this.scoreApi.playPause();
+                                this.scoreApi.playbackSpeed = 1.0;
+                            }
+                        }, 5);
+                    }
+                } catch (e) {
+                    console.warn('Error forcing cursor layout:', e);
                 }
             }
         }
