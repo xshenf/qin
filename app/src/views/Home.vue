@@ -472,6 +472,7 @@ const handleLoginToggle = async () => {
   if (authStore.isAuthenticated) {
     if (confirm("确定要退出登录吗？")) {
       authStore.logout();
+      loadHistory();
     }
   } else {
     router.push('/login');

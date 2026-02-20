@@ -25,33 +25,50 @@ export const initDB = () => {
     });
 };
 
+const getUserPrefix = () => {
+    const userStr = localStorage.getItem('user');
+    if (userStr) {
+        try {
+            const user = JSON.parse(userStr);
+            return user.email ? `${user.email}_` : 'guest_';
+        } catch (e) { }
+    }
+    return 'guest_';
+};
+
 export const saveScore = async (id, name, data, addTime = Date.now()) => {
     const db = await initDB();
+    const prefix = getUserPrefix();
+    const realId = `${prefix}${id}`;
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
         const item = {
-            id,
+            id: realId,
             name,
             data,
             addTime
         };
         const request = store.put(item);
-        request.onsuccess = () => resolve(item);
+        request.onsuccess = () => resolve({ id, name, addTime }); // Return Original ID
         request.onerror = (e) => reject(e.target.error);
     });
 };
 
 export const getScoresList = async () => {
     const db = await initDB();
+    const prefix = getUserPrefix();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readonly');
         const store = transaction.objectStore(STORE_NAME);
         const request = store.getAll();
         request.onsuccess = () => {
-            const list = request.result || [];
-            // 只返回基本信息，不返回完整数据(data)，避免内存过大
-            resolve(list.map(item => ({ id: item.id, name: item.name, addTime: item.addTime })).sort((a, b) => b.addTime - a.addTime));
+            const allItems = request.result || [];
+            const userItems = allItems.filter(item => String(item.id).startsWith(prefix));
+            resolve(userItems.map(item => {
+                const originalId = String(item.id).substring(prefix.length);
+                return { id: originalId, name: item.name, addTime: item.addTime };
+            }).sort((a, b) => b.addTime - a.addTime));
         };
         request.onerror = (e) => reject(e.target.error);
     });
@@ -59,21 +76,31 @@ export const getScoresList = async () => {
 
 export const getScoreData = async (id) => {
     const db = await initDB();
+    const prefix = getUserPrefix();
+    const realId = `${prefix}${id}`;
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readonly');
         const store = transaction.objectStore(STORE_NAME);
-        const request = store.get(id);
-        request.onsuccess = () => resolve(request.result);
+        const request = store.get(realId);
+        request.onsuccess = () => {
+            const result = request.result;
+            if (result) {
+                result.id = id; // restore original ID for caller
+            }
+            resolve(result);
+        };
         request.onerror = (e) => reject(e.target.error);
     });
 };
 
 export const deleteScore = async (id) => {
     const db = await initDB();
+    const prefix = getUserPrefix();
+    const realId = `${prefix}${id}`;
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
-        const request = store.delete(id);
+        const request = store.delete(realId);
         request.onsuccess = () => resolve();
         request.onerror = (e) => reject(e.target.error);
     });
