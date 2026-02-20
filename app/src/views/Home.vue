@@ -1,5 +1,5 @@
 <script setup>
-import { ref, nextTick, watch } from 'vue';
+import { ref, nextTick, watch, onMounted, onUnmounted } from 'vue';
 import ScoreViewer from '../components/ScoreViewer.vue';
 import Tuner from '../components/Tuner.vue';
 import AudioEngine from '../audio/AudioEngine';
@@ -387,6 +387,7 @@ const handleDrop = (e) => {
 };
 
 const togglePlayback = () => {
+  if (!isScoreLoaded.value) return;
   if (scoreViewer.value) {
     scoreViewer.value.playPause();
     // Do not toggle isPlaying here manually, wait for event from component
@@ -476,6 +477,24 @@ const closeScore = () => {
     // Reset file input if possible (not easily accessible via ref here but handleFileSelect handles new ones)
 };
 // console.log("Default Score URL:", demoFile.value);
+// 键盘快捷键
+const handleKeydown = (e) => {
+  // 如果是空格键 && 乐谱已加载 && 焦点不在输入框
+  if ((e.code === 'Space' || e.key === ' ') && isScoreLoaded.value) {
+    if (['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) return;
+    
+    e.preventDefault(); // 防止网页滚动
+    togglePlayback();
+  }
+};
+
+onMounted(() => {
+    window.addEventListener('keydown', handleKeydown);
+});
+
+onUnmounted(() => {
+    window.removeEventListener('keydown', handleKeydown);
+});
 </script>
 
 <template>
