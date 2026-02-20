@@ -474,7 +474,7 @@ const handleScoreLoaded = (score) => {
     <header>
       <div class="header-bar">
         <div class="header-left">
-          <h1>🎸 Guitar Practice</h1>
+          <h1>🎸 Qin</h1>
         </div>
         <div class="mobile-controls" v-if="isMobile">
            <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded">
