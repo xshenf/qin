@@ -59,7 +59,8 @@ const initAlphaTab = () => {
   }
 
   const settings = {
-    file: props.fileUrl || '', // Ensure valid file url is passed
+    // file: props.fileUrl || '', // Ensure valid file url is passed
+
     core: {
       // Tell AlphaTab where to find fonts (Use CDN to reduce build size)
       fontDirectory: 'https://unpkg.com/@coderline/alphatab@1.8.1/dist/font/',
@@ -86,6 +87,10 @@ const initAlphaTab = () => {
       scrollOffsetX: 0,
     }
   };
+
+  if (props.fileUrl) {
+    settings.file = props.fileUrl;
+  }
 
   try {
     api = new alphaTab.AlphaTabApi(scoreContainer.value, settings);

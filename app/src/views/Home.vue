@@ -444,8 +444,8 @@ const onTrackChange = () => {
 
 
 
-const demoFile = '/gtp/Canon_D.gp5'; 
-console.log("Default Score URL:", demoFile);
+const demoFile = ref(null);
+// console.log("Default Score URL:", demoFile.value);
 </script>
 
 <template>
@@ -624,7 +624,6 @@ console.log("Default Score URL:", demoFile);
 
     <main class="layout-full">
       <ScoreViewer 
-        v-if="demoFile"
         ref="scoreViewer" 
         :file-url="demoFile"
         :zoom="zoom"

@@ -1,6 +1,6 @@
 <template>
   <div class="app-layout">
-    <nav class="main-nav">
+    <!-- <nav class="main-nav">
       <div class="nav-links">
         <router-link to="/">Home</router-link> |
         <template v-if="!authStore.isAuthenticated">
@@ -13,7 +13,7 @@
           <span v-if="authStore.isAdmin"> | <router-link to="/admin">Admin</router-link></span>
         </template>
       </div>
-    </nav>
+    </nav> -->
     
     <router-view />
   </div>
