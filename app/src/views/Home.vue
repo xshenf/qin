@@ -647,7 +647,7 @@ onUnmounted(() => {
         </div>
 
         <div class="mobile-controls" v-if="isMobile">
-           <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded">
+           <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded || isPracticeMode">
             {{ isPlaying ? '⏸' : '▶' }}
            </button>
            <button @click="showToolbar = !showToolbar" :class="{ active: showToolbar }">
@@ -667,7 +667,7 @@ onUnmounted(() => {
 
         <!-- 播放控制 -->
         <div class="tool-group">
-          <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded">
+          <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded || isPracticeMode">
             {{ isPlaying ? '⏸ 暂停' : '▶ 播放' }}
           </button>
         </div>
