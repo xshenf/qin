@@ -32,8 +32,14 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/user/history', historyRoutes);
 
-app.get('/', (req, res) => {
-    res.send('Guitar Practice App Backend is running.');
+// Serve Vue Frontend
+const path = require('path');
+const frontendPath = path.join(__dirname, '../../app/dist');
+app.use(express.static(frontendPath));
+
+// Fallback for Vue Router History Mode
+app.get('*', (req, res) => {
+    res.sendFile(path.join(frontendPath, 'index.html'));
 });
 
 // Initialize DB and start server
