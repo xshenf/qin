@@ -287,6 +287,21 @@ const stop = () => {
     }
 };
 
+const clear = () => {
+    if (api) {
+        try {
+            api.destroy();
+        } catch (e) {
+            console.warn("Error destroying API:", e);
+        }
+        api = null;
+    }
+    if (scoreContainer.value) {
+        scoreContainer.value.innerHTML = '';
+    }
+    markers.value = [];
+};
+
 const getApi = () => api;
 // ...
 const loadFile = (file) => {
@@ -480,6 +495,7 @@ const renderTrack = (track) => {
 defineExpose({
   playPause,
   stop,
+  clear,
   loadFile,
   getApi,
   markNote,

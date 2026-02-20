@@ -453,6 +453,28 @@ const handleScoreLoaded = (score) => {
     console.log("Score loaded:", score);
     isScoreLoaded.value = true;
 };
+
+const closeScore = () => {
+    console.log("Closing score");
+    isScoreLoaded.value = false;
+    isPlaying.value = false;
+    tracks.value = [];
+    
+    // Reset detection display
+    detectedPitch.value = '--';
+    detectedNote.value = '--';
+    
+    if (scoreViewer.value) {
+        scoreViewer.value.stop();
+        scoreViewer.value.clear();
+    }
+    PracticeEngine.stop();
+    
+    // Clean up current Demo file reference if any
+    demoFile.value = null;
+    
+    // Reset file input if possible (not easily accessible via ref here but handleFileSelect handles new ones)
+};
 // console.log("Default Score URL:", demoFile.value);
 </script>
 
@@ -473,7 +495,7 @@ const handleScoreLoaded = (score) => {
 
     <header>
       <div class="header-bar">
-        <div class="header-left">
+        <div class="header-left" @click="closeScore" style="cursor: pointer;" title="返回首页">
           <h1>🎸 Qin</h1>
         </div>
         <div class="mobile-controls" v-if="isMobile">

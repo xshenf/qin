@@ -35,6 +35,11 @@ class PracticeEngine {
         this.loop();
     }
 
+    stop() {
+        this.isPracticeRunning = false;
+        this.expectedNotes = [];
+    }
+
     setResultCallback(callback) {
         this.onNoteResult = callback;
     }
