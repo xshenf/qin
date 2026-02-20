@@ -105,6 +105,12 @@ class PracticeEngine {
             if (this.scoreApi) {
                 const currentTick = this.scoreApi.tickPosition;
 
+                // When in follow mode and player is stopped, we must manually fetch expected notes
+                // because AlphaTab won't fire 'playedBeatChanged' for us.
+                if (this.isFollowMode && this.expectedNotes.length === 0) {
+                    this.fetchNotesAtTick(currentTick);
+                }
+
                 // 3. Find expected notes around this time
                 // AlphaTab doesn't expose a simple "getNoteAtTick" for performance, 
                 // we usually rely on 'playedBeatChanged' or pre-processing. 
@@ -234,6 +240,9 @@ class PracticeEngine {
                 // Set tick position (this updates the internal cursor)
                 this.scoreApi.tickPosition = beatEndTick;
 
+                // Clear expectedNotes so the loop will immediately fetch the next ones for the new tick
+                this.expectedNotes = [];
+
                 // Force a player update/seek so the UI actually scrolls if out of bounds
                 // Often 'tickPosition' assignment handles UI but in paused state it may not scroll.
                 if (this.scoreApi.player && this.scoreApi.player.state === 0) { // 0 represents Paused/Stopped in most AlphaTab versions
@@ -293,6 +302,46 @@ class PracticeEngine {
             });
         }
         this.expectedNotes = notes;
+    }
+
+    // Manually scan the score for notes at or immediately after a given tick
+    fetchNotesAtTick(tick) {
+        if (!this.scoreApi || !this.scoreApi.score) return;
+
+        // Find visible track (usually tracks[0])
+        const track = this.scoreApi.tracks && this.scoreApi.tracks[0] ? this.scoreApi.tracks[0] : this.scoreApi.score.tracks[0];
+        if (!track) return;
+
+        let targetBeat = null;
+
+        // Iterate through bars, voices, beats to find the next beat to play
+        for (const stave of track.staves) {
+            for (const voice of stave.voices || []) {
+                for (const beat of voice.beats || []) {
+                    if (!beat.notes || beat.notes.length === 0) continue;
+
+                    // We want the beat that covers the current tick, 
+                    // OR the very next beat if the current tick is empty space.
+                    if (beat.start >= tick || (tick >= beat.start && tick < beat.start + beat.duration)) {
+                        if (!targetBeat || beat.start < targetBeat.start) {
+                            targetBeat = beat;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (targetBeat && targetBeat.notes) {
+            const mappedNotes = targetBeat.notes.map(n => ({
+                id: n.id,
+                fret: n.value,
+                string: n.string,
+                startTick: targetBeat.start,
+                duration: targetBeat.duration,
+                ref: n
+            }));
+            this.updateExpectedNotes(mappedNotes);
+        }
     }
 
     getTuning(stringIndex) {
