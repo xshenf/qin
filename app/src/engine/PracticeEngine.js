@@ -244,23 +244,11 @@ class PracticeEngine {
                 this.expectedNotes = [];
 
                 try {
-                    if (this.scoreApi.player && this.scoreApi.player.state !== 1) { // 1 = Playing
-                        // 强制更新视图
-                        this.scoreApi.render();
-
-                        // 由于处于暂停状态，为了让页面滚动，我们还需要手动触发一下 playedBeatChanged 事件
-                        // 这能让外部组件（如 ScoreViewer）知道目前进度变了（并去调用其内部的各种滚动和染色逻辑）
-                        // 在此我们只能寄希望于 tickPosition 已经成功修改内部状态。
-
-                        // 作为一个备用极端的 Hack：短暂地用极低的前端体积播放再暂停
-                        this.scoreApi.playbackSpeed = 0.01;
-                        this.scoreApi.playPause();
-                        setTimeout(() => {
-                            if (this.scoreApi.player && this.scoreApi.player.state === 1) {
-                                this.scoreApi.playPause();
-                                this.scoreApi.playbackSpeed = 1.0;
-                            }
-                        }, 5);
+                    if (this.scoreApi.player && this.scoreApi.player.state === 0) { // 0 = stopped
+                        // 强制更新视图 (不再使用有 bug 的 playPause Hack)
+                        if (this.scoreApi.renderer) {
+                            this.scoreApi.render();
+                        }
                     }
                 } catch (e) {
                     console.warn('Error forcing cursor layout:', e);
@@ -322,11 +310,20 @@ class PracticeEngine {
 
     // Manually scan the score for notes at or immediately after a given tick
     fetchNotesAtTick(tick) {
-        if (!this.scoreApi || !this.scoreApi.score) return;
+        if (!this.scoreApi || !this.scoreApi.score) {
+            // console.warn("fetchNotesAtTick: No score loaded yet");
+            return;
+        }
 
         // Find visible track (usually tracks[0])
-        const track = this.scoreApi.tracks && this.scoreApi.tracks[0] ? this.scoreApi.tracks[0] : this.scoreApi.score.tracks[0];
-        if (!track) return;
+        const track = (this.scoreApi.tracks && this.scoreApi.tracks.length > 0)
+            ? this.scoreApi.tracks[0]
+            : this.scoreApi.score.tracks[0];
+
+        if (!track) {
+            console.warn("fetchNotesAtTick: No track found in score");
+            return;
+        }
 
         let targetBeat = null;
 
@@ -350,13 +347,15 @@ class PracticeEngine {
         if (targetBeat && targetBeat.notes) {
             const mappedNotes = targetBeat.notes.map(n => ({
                 id: n.id,
-                fret: n.value,
+                fret: n.value || n.fret, // Handle different AlphaTab versions
                 string: n.string,
                 startTick: targetBeat.start,
                 duration: targetBeat.duration,
                 ref: n
             }));
             this.updateExpectedNotes(mappedNotes);
+        } else {
+            console.warn("fetchNotesAtTick: Could not find any beat at or after tick", tick);
         }
     }
 

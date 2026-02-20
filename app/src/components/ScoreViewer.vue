@@ -493,6 +493,28 @@ const renderTrack = (track) => {
 // ...
 
 // Expose methods
+const testCursorMove = () => {
+    if (!api) return;
+    try {
+        const currentTick = api.tickPosition;
+        console.log("TEST JUMP: Previous tick:", currentTick);
+        const newTick = currentTick + 960; // Jump 1 quarter note
+        
+        // This setter updates internal state
+        api.tickPosition = newTick;
+        
+        // When stopped, force the layouter to render again
+        // AlphaTab's renderer can be told to update and scroll natively
+        if (api.renderer) {
+            api.render();
+        }
+        
+        console.log("TEST JUMP: New tick:", api.tickPosition);
+    } catch (e) {
+        console.warn("TEST JUMP ERROR:", e);
+    }
+};
+
 defineExpose({
   playPause,
   stop,
@@ -500,7 +522,8 @@ defineExpose({
   loadFile,
   getApi,
   markNote,
-  renderTrack
+  renderTrack,
+  testCursorMove
 });
 </script>
 

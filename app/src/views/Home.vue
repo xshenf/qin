@@ -56,6 +56,14 @@ const selectedTrackIndex = ref(0);
 
 let uiInterval = null;
 
+const testJumpCursor = () => {
+  if (scoreViewer.value && scoreViewer.value.testCursorMove) {
+    scoreViewer.value.testCursorMove();
+  } else {
+    console.warn("scoreViewer component does not expose testCursorMove");
+  }
+};
+
 const togglePractice = () => {
   isPracticeMode.value = !isPracticeMode.value;
   if (isPracticeMode.value) {
@@ -682,6 +690,10 @@ onUnmounted(() => {
             :disabled="!isScoreLoaded"
           >
             {{ isPracticeMode ? '🎯 练习/跟随中' : '🎯 练习/跟随' }}
+          </button>
+          
+          <button @click="testJumpCursor" class="tool-btn" style="margin-left: 5px; background-color: #8e44ad;" title="Debug跳跃光标">
+            测试光标
           </button>
           
           <div class="monitor" v-if="isPracticeMode">
