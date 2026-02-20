@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { alphaTab } from '@coderline/alphatab-vite'
 import basicSsl from '@vitejs/plugin-basic-ssl'
+import fs from 'fs'
+import path from 'path'
 
 // https://vite.dev/config/
 export default defineConfig(({ command }) => {
@@ -55,7 +57,23 @@ export default defineConfig(({ command }) => {
             vue: 'Vue',
             '@coderline/alphatab': 'alphaTab'
           }
-        }
+        },
+        plugins: [
+          {
+            name: 'remove-fonts-on-build',
+            closeBundle() {
+              const distDir = path.resolve(__dirname, 'dist');
+
+              ['font', 'soundfont'].forEach((dir) => {
+                const target = path.join(distDir, dir);
+                if (fs.existsSync(target)) {
+                  fs.rmSync(target, { recursive: true, force: true });
+                  console.log(`\nRemoved ${dir} from dist/`);
+                }
+              });
+            }
+          }
+        ]
       }
     },
     server: {
