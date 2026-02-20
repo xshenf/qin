@@ -338,6 +338,7 @@ const formatRecordingTime = (seconds) => {
 const handleFileSelect = (event) => {
   const file = event.target.files[0];
   if (file && scoreViewer.value) {
+    isScoreLoaded.value = false; // Reset state while loading
     scoreViewer.value.loadFile(file);
   }
 };
@@ -377,6 +378,7 @@ const handleDrop = (e) => {
         isPlaying.value = false;
       }
       // 加载新文件
+      isScoreLoaded.value = false;
       scoreViewer.value.loadFile(file);
     } else {
       alert('请拖入有效的 Guitar Pro 文件 (.gp, .gp3, .gp4, .gp5, .gpx, .gp7)');
@@ -445,6 +447,12 @@ const onTrackChange = () => {
 
 
 const demoFile = ref(null);
+const isScoreLoaded = ref(false);
+
+const handleScoreLoaded = (score) => {
+    console.log("Score loaded:", score);
+    isScoreLoaded.value = true;
+};
 // console.log("Default Score URL:", demoFile.value);
 </script>
 
@@ -469,7 +477,7 @@ const demoFile = ref(null);
           <h1>🎸 Guitar Practice</h1>
         </div>
         <div class="mobile-controls" v-if="isMobile">
-           <button @click="togglePlayback" :class="{ active: isPlaying }">
+           <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded">
             {{ isPlaying ? '⏸' : '▶' }}
            </button>
            <button @click="showToolbar = !showToolbar" :class="{ active: showToolbar }">
@@ -489,7 +497,7 @@ const demoFile = ref(null);
 
         <!-- 播放控制 -->
         <div class="tool-group">
-          <button @click="togglePlayback" :class="{ active: isPlaying }">
+          <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded">
             {{ isPlaying ? '⏸ 暂停' : '▶ 播放' }}
           </button>
         </div>
@@ -501,6 +509,7 @@ const demoFile = ref(null);
             class="tool-btn" 
             :class="{ active: isPracticeMode }"
             title="开启智能练习模式"
+            :disabled="!isScoreLoaded"
           >
             {{ isPracticeMode ? '🎯 练习中' : '🎯 练习' }}
           </button>
@@ -623,7 +632,38 @@ const demoFile = ref(null);
     <PerformanceBar v-if="isPracticeMode" :detectedPitch="detectedPitchObj" />
 
     <main class="layout-full">
+      <div v-if="!isScoreLoaded" class="empty-state">
+        <div class="hero-section">
+          <div class="hero-icon">🎸</div>
+          <h2>没有加载乐谱</h2>
+          <p>拖放GTP文件到此处，或者点击下方按钮打开</p>
+          <label class="hero-btn">
+            📂 打开乐谱文件
+            <input type="file" accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7" @change="handleFileSelect" hidden />
+          </label>
+        </div>
+        
+        <div class="cards-grid">
+          <div class="info-card">
+            <div class="card-icon">📄</div>
+            <h3>支持格式</h3>
+            <p>支持所有主流GTP格式：.gp, .gp5, .gpx, .gp3, .gp4</p>
+          </div>
+          <div class="info-card">
+            <div class="card-icon">🛠️</div>
+            <h3>强大工具</h3>
+            <p>内置调音器、录音机、以及智能练习模式，助你高效练琴</p>
+          </div>
+          <div class="info-card">
+            <div class="card-icon">⚡</div>
+            <h3>快捷操作</h3>
+            <p>使用空格键播放/暂停，支持全屏模式和多种显示比例</p>
+          </div>
+        </div>
+      </div>
+
       <ScoreViewer 
+        class="score-viewer-layer"
         ref="scoreViewer" 
         :file-url="demoFile"
         :zoom="zoom"
@@ -632,6 +672,7 @@ const demoFile = ref(null);
         @playerReady="handleScoreReady"
         @playerFinished="isPlaying = false"
         @isPlayingChanged="(playing) => isPlaying = playing"
+        @scoreLoaded="handleScoreLoaded"
       />
     </main>
 
@@ -1083,5 +1124,118 @@ main.layout-full :deep(.score-container) {
   .app-container:fullscreen main {
     padding-top: 45px;
   }
+}
+/* Empty State Styles */
+/* Empty State Styles */
+.layout-full {
+  flex: 1;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.empty-state {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  box-sizing: border-box;
+  background: #1a1a2e;
+}
+
+.score-viewer-layer {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+}
+
+.hero-section {
+  text-align: center;
+  margin-bottom: 60px;
+}
+
+.hero-icon {
+  font-size: 4rem;
+  margin-bottom: 20px;
+}
+
+.hero-section h2 {
+  font-size: 2rem;
+  margin: 0 0 10px;
+  color: #42b883;
+}
+
+.hero-section p {
+  color: #888;
+  margin: 0 0 30px;
+  font-size: 1.1rem;
+}
+
+.hero-btn {
+  display: inline-block;
+  padding: 12px 24px;
+  background: #42b883;
+  color: #1a1a2e;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: none;
+}
+
+.hero-btn:hover {
+  background: #3aa876;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(66, 184, 131, 0.3);
+}
+
+.cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 20px;
+  width: 100%;
+  max-width: 900px;
+}
+
+.info-card {
+  background: #16213e;
+  padding: 24px;
+  border-radius: 12px;
+  border: 1px solid #2a2a4a;
+  text-align: center;
+  transition: all 0.2s;
+}
+
+.info-card:hover {
+  transform: translateY(-5px);
+  border-color: #42b883;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.card-icon {
+  font-size: 2rem;
+  margin-bottom: 15px;
+}
+
+.info-card h3 {
+  color: #e0e0e0;
+  margin: 0 0 10px;
+  font-size: 1.2rem;
+}
+
+.info-card p {
+  color: #888;
+  margin: 0;
+  line-height: 1.5;
+  font-size: 0.95rem;
 }
 </style>

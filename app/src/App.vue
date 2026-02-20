@@ -30,6 +30,13 @@ const logout = () => {
     authStore.logout();
     router.push('/login');
 };
+
+import { onMounted } from 'vue';
+import { initSoundFontLoader } from './utils/soundFont';
+
+onMounted(() => {
+    initSoundFontLoader();
+});
 </script>
 
 <style>

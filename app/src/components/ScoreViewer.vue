@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
+import { soundFontUrl } from '../utils/soundFont';
 import * as alphaTab from '@coderline/alphatab';
 import PracticeEngine from '../engine/PracticeEngine';
 
@@ -81,7 +82,7 @@ const initAlphaTab = () => {
       enableElementHighlighting: true,
       enableElementHighlighting: true,
       // Use CDN for SoundFont to reduce build size (1.3MB)
-      soundFont: 'https://unpkg.com/@coderline/alphatab@1.8.1/dist/soundfont/sonivox.sf2',
+      soundFont: soundFontUrl.value,
       scrollElement: scoreContainer.value.parentElement,
       scrollSpeed: 10,        // 调整滚动速度 (更小的值 = 更快的动画?) 尝试 100ms
       scrollOffsetX: 0,
@@ -299,23 +300,116 @@ const loadFile = (file) => {
   const reader = new FileReader();
   reader.onload = (e) => {
     if (e.target?.result) {
-      api.load(e.target.result);
+      if (api) {
+          api.load(e.target.result);
+      } else {
+          // If api is not ready (which shouldn't happen if loaded), queue or init?
+          // Actually, if we are invisible, api might not be created yet.
+          // But loadFile is called when we select a file.
+          // If we are in empty state, ScoreViewer is v-show="false" (or true now).
+          // Wait, Home.vue uses v-show. So element exists but display:none?
+          // v-show="isScoreLoaded" -> if false, display:none.
+          // So dimensions are 0.
+          
+          // We need to ensure we don't init AlphaTab until visible.
+          // But loadFile is what triggers isScoreLoaded=true in Home.vue (eventually).
+          
+          // Actually, Home.vue handles file loading, then sets isScoreLoaded=true.
+          // Then ScoreViewer becomes visible.
+          // Then we should init/load.
+          
+          // Let's defer loading until we have dimensions.
+          pendingLoadData = e.target.result;
+          checkVisibilityAndInit();
+      }
     }
   };
   reader.readAsArrayBuffer(file);
 };
 
+let pendingLoadData = null;
+let resizeObserver = null;
+
+const checkVisibilityAndInit = () => {
+    if (!scoreContainer.value) return;
+    
+    // Check if visible and has width
+    const rect = scoreContainer.value.getBoundingClientRect();
+    
+    // Strict check: if width is 0, we are invisible (e.g. display:none from v-show)
+    if (rect.width === 0 || rect.height === 0) {
+        // console.log("Skipping AlphaTab init - container invisible");
+        return;
+    }
+
+    if (!api) {
+        initAlphaTab();
+    }
+    
+    if (api && pendingLoadData) {
+        try {
+            api.load(pendingLoadData);
+            pendingLoadData = null;
+        } catch (e) {
+            console.error("Error loading pending data", e);
+        }
+    }
+};
+
+onMounted(() => {
+  console.log("ScoreViewer Mounted");
+  
+  // Use ResizeObserver to detect when we become visible/resized
+  resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+           // Only trigger if we have dimensions
+          if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+              checkVisibilityAndInit();
+          }
+      }
+  });
+  
+  if (scoreContainer.value) {
+      resizeObserver.observe(scoreContainer.value);
+  }
+  
+  // Try init immediately if already visible
+  checkVisibilityAndInit();
+});
+
+onUnmounted(() => {
+  console.log("ScoreViewer Unmounted");
+  if (resizeObserver) {
+      resizeObserver.disconnect();
+      resizeObserver = null;
+  }
+  if (api) {
+        try {
+            api.destroy();
+        } catch (e) {
+            console.warn("Error destroying AlphaTab:", e);
+        }
+        api = null;
+    }
+});
+
+
 watch(
   () => props.fileUrl,
   (newUrl) => {
-    if (newUrl && api) {
+    if (newUrl) {
       console.log("Loading new file from watch:", newUrl);
-      try {
-        api.pause();
-      } catch (e) {
-        // Ignore parsing errors or if user wasn't playing
+      if (api) {
+        try {
+          api.pause();
+        } catch (e) {
+          // Ignore parsing errors or if user wasn't playing
+        }
+        api.load(newUrl);
+      } else {
+        pendingLoadData = newUrl;
+        checkVisibilityAndInit();
       }
-      api.load(newUrl);
     }
   }
 );
@@ -339,6 +433,14 @@ watch(() => props.staveProfile, (val) => {
 watch(() => props.playbackSpeed, (val) => {
   if (api) {
     api.playbackSpeed = val / 100;
+  }
+});
+
+watch(soundFontUrl, (newUrl) => {
+  if (api && newUrl) {
+    console.log("Updating SoundFont URL to:", newUrl);
+    api.settings.player.soundFont = newUrl;
+    api.updateSettings();
   }
 });
 
