@@ -229,8 +229,17 @@ class PracticeEngine {
                 // Calculate next beat tick (start + duration of the current beat notes)
                 // We use a small epsilon offset to ensure we step into the NEXT beat properly
                 const beatEndTick = this.expectedNotes[0].startTick + this.expectedNotes[0].duration;
-                console.log(`Follow Mode: All notes hit! Advancing to tick ${beatEndTick}`);
+                console.log(`%c[FOLLOW MODE] ✅ 匹配成功！自动推进光标到 Tick: ${beatEndTick}`, 'color: #3498db; font-size: 14px; font-weight: bold;');
+
+                // Set tick position (this updates the internal cursor)
                 this.scoreApi.tickPosition = beatEndTick;
+
+                // Force a player update/seek so the UI actually scrolls if out of bounds
+                // Often 'tickPosition' assignment handles UI but in paused state it may not scroll.
+                if (this.scoreApi.player && this.scoreApi.player.state === 0) { // 0 represents Paused/Stopped in most AlphaTab versions
+                    // Trigger a mock play/pause or just force UI layout
+                    // this.scoreApi.playPause(); setTimeout(() => this.scoreApi.playPause(), 10);
+                }
             }
         }
     }
@@ -242,7 +251,28 @@ class PracticeEngine {
             return;
         }
 
-        console.log("PracticeEngine: expected notes updated", notes.length);
+        // --- ADDED LOGGING FOR USER ---
+        if (notes && notes.length > 0) {
+            const beatId = notes[0].ref?.beat?.id || 'Unknown Beat';
+            const measureStr = notes[0].ref?.beat?.voice?.bar?.index !== undefined
+                ? (notes[0].ref.beat.voice.bar.index + 1) : '?';
+
+            const noteNames = notes.map(n => {
+                let midi = n.midi;
+                if (!midi) {
+                    const tuning = this.getTuning(n.string);
+                    if (tuning !== null && tuning !== undefined) {
+                        midi = tuning + n.fret;
+                    }
+                }
+                const expectedFreq = midi ? (440 * Math.pow(2, (midi - 69) / 12)).toFixed(1) + 'Hz' : 'Unknown';
+                return `[第${n.string}弦${n.fret}品 (${expectedFreq})]`;
+            }).join(', ');
+
+            console.log(`%c[FOLLOW MODE] 目标小节: 第${measureStr}小节, 节拍ID:${beatId}, 期望音符: ${noteNames}`, 'color: #42b883; font-weight: bold;');
+        }
+        // ------------------------------
+
         // Check for missed notes in previous beats
         if (this.expectedNotes && this.expectedNotes.length > 0) {
             this.expectedNotes.forEach(note => {
