@@ -31,7 +31,7 @@ const authStore = useAuthStore();
 const handleRegister = async () => {
     try {
         await authStore.register(email.value, password.value);
-        message.value = 'Registration successful! Please check the backend console for verification link.';
+        message.value = '注册成功！现在您可以直接登录了。';
         error.value = '';
     } catch (err) {
         error.value = err;

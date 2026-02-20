@@ -59,13 +59,13 @@ router.post('/register', async (req, res) => {
             email,
             password_hash: hashedPassword,
             verification_token: verificationToken,
-            is_verified: false // Set to true for dev if needed, but false is safer
+            is_verified: true // Set to true for dev temporarily
         });
 
         // Send verification email
-        await sendVerificationEmail(email, verificationToken);
+        // await sendVerificationEmail(email, verificationToken);
 
-        res.status(201).json({ message: 'User registered. Please check backend console for verification link.' });
+        res.status(201).json({ message: 'User registered. You can now login.' });
     } catch (error) {
         console.error(error);
         res.status(500).json({ message: 'Server error during registration.' });
