@@ -122,10 +122,17 @@ class PracticeEngine {
 
                 // Let's rely on `this.expectedNotes` which we can update via events.
 
-                if (pitchData && this.expectedNotes && this.expectedNotes.length > 0) {
-                    const detectedFreq = pitchData.frequency;
+                // Combine YIN and FFT peaks for comprehensive matching
+                let pitchesToCheck = [];
+                if (pitchData) pitchesToCheck.push(pitchData);
+                if (polyPitchData && polyPitchData.length > 0) {
+                    pitchesToCheck.push(...polyPitchData);
+                }
 
-                    // Check against all expected notes (polyphony support in future)
+                if (pitchesToCheck.length > 0 && this.expectedNotes && this.expectedNotes.length > 0) {
+                    const isLoudAttack = pitchData && pitchData.isAttack;
+
+                    // Check against all expected notes
                     for (const note of this.expectedNotes) {
                         if (this.noteStatus.has(note.id)) continue; // Already processed
 
@@ -143,27 +150,47 @@ class PracticeEngine {
                         // Freq = 440 * 2^((midi - 69) / 12)
                         const expectedFreq = 440 * Math.pow(2, (midi - 69) / 12);
 
-                        // (Debug log removed - was causing severe performance degradation)
+                        let matched = false;
 
-                        // Tolerance: +/- 0.6 semitone (approx 3.5% freq difference)
-                        const diffRatio = detectedFreq / expectedFreq;
-
-                        // Default strict tolerance
-                        let minRatio = 0.965; // ~ -0.6 semitone
-                        let maxRatio = 1.035; // ~ +0.6 semitone
-
-                        // In Follow Mode, we use extremely fuzzy matching.
-                        // If they play *any* clear pitch, we assume they are trying to progress 
-                        // and we just follow along to the next beat. 
-                        // We set tolerance to +/- 12 semitones (a full octave in any direction)
                         if (this.isFollowMode) {
-                            minRatio = 0.5; // -12 semitones
-                            maxRatio = 2.0; // +12 semitones
+                            // In Follow Mode: 
+                            // 1. Any clear new pluck (attack) triggers the beat progression immediately.
+                            // 2. Or, if they let it ring and it configures matches within +/- 12 semitones
+                            if (isLoudAttack) {
+                                matched = true;
+                            } else {
+                                for (const p of pitchesToCheck) {
+                                    const diffRatio = p.frequency / expectedFreq;
+                                    if (diffRatio > 0.5 && diffRatio < 2.0) {
+                                        matched = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        } else {
+                            // In Practice Mode: Strict +/- 0.6 semitone tolerance
+                            const minRatio = 0.965;
+                            const maxRatio = 1.035;
+
+                            for (const p of pitchesToCheck) {
+                                const diffRatio = p.frequency / expectedFreq;
+
+                                // Direct match
+                                if (diffRatio > minRatio && diffRatio < maxRatio) {
+                                    matched = true; break;
+                                }
+                                // Harmonic tolerance: Allow octave higher (common guitar artifact)
+                                if (diffRatio > (minRatio * 2) && diffRatio < (maxRatio * 2)) {
+                                    matched = true; break;
+                                }
+                                // Harmonic tolerance: Allow octave lower ("missing fundamental" phenomenon)
+                                if (diffRatio > (minRatio * 0.5) && diffRatio < (maxRatio * 0.5)) {
+                                    matched = true; break;
+                                }
+                            }
                         }
 
-                        // 0.6 semitone ratio is approx 1.035
-                        if (diffRatio > minRatio && diffRatio < maxRatio) {
-                            // HIT!
+                        if (matched) {
                             this.handleNoteHit(note, currentTick);
                         }
                     }

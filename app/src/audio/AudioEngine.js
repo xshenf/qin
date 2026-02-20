@@ -12,6 +12,10 @@ class AudioEngine {
         // Configuration
         this.sampleRate = 44100;
         this.bufferSize = 8192; // 增大以提高低频分辨率，特别是移动端
+
+        // Attack/Transient detection
+        this.lastVolume = 0;
+        this.lastAttackTime = 0;
     }
 
     async init() {
@@ -141,11 +145,22 @@ class AudioEngine {
         }
         const averageVolume = sum / this.buffer.length;
 
-        // 音量阈值（降低到0.001以最大化移动端灵敏度）
-        const volumeThreshold = 0.001;
+        // 音量阈值（调高到0.005过滤底噪和摩擦音）
+        const volumeThreshold = 0.005;
         if (averageVolume < volumeThreshold) {
-            return null; // 音量太小，忽略（可能是环境噪音）
+            this.lastVolume = averageVolume;
+            return null; // 音量太小，忽略
         }
+
+        // === 瞬态(Attack)检测 - 寻找拨弦的瞬间 ===
+        let isAttack = false;
+        const now = this.audioContext.currentTime;
+        // 如果当前音量是上一帧的 1.5 倍以上，并且距离上次拨弦超过 100ms
+        if (averageVolume > this.lastVolume * 1.5 && (now - this.lastAttackTime > 0.1)) {
+            isAttack = true;
+            this.lastAttackTime = now;
+        }
+        this.lastVolume = averageVolume;
 
         // Detect pitch
         const frequency = this.detectPitch(this.buffer);
@@ -168,7 +183,8 @@ class AudioEngine {
                 frequency: frequency, // Hz
                 note: pitchInfo.note,
                 cents: pitchInfo.cents,
-                timestamp: this.audioContext.currentTime
+                timestamp: this.audioContext.currentTime,
+                isAttack: isAttack
             };
         }
         return null;
@@ -286,39 +302,34 @@ class AudioEngine {
         while (peaks.length > 0 && finalizedPeaks.length < maxPolyphony) {
             const currentPeak = peaks.shift(); // Loudest remaining
 
-            // Check if this peak is a harmonic of an already selected peak?
-            // Meaning: is currentPeak = k * existing?
-            // Since we sorted by loudness, the fundamental might be quieter than harmonic (e.g. on phone mic).
-            // But usually fundamental is significant.
-
-            // Let's just suppress *its* harmonics from the *remaining* list.
-            // And also check if it is a harmonic of an *already selected* peak.
-
             let isArtifact = false;
-            for (const existing of finalizedPeaks) {
-                // Check if current is harmonic of existing (Existing is louder)
+            for (let i = 0; i < finalizedPeaks.length; i++) {
+                const existing = finalizedPeaks[i];
+
+                // Check if current is harmonic of existing (Existing is louder/already picked)
                 if (isHarmonic(existing.frequency, currentPeak.frequency)) {
                     isArtifact = true;
                     break;
                 }
-                // Check if existing is harmonic of current? (Current is quieter but lower freq?)
-                // No, current is typically higher freq if it's a harmonic.
-                // But if current is 100Hz and Existing is 200Hz.
-                // If 200Hz is harmonic of 100Hz, we should have picked 100Hz?
-                // But 200Hz was louder.
-                // This is the "Missing Fundamental" problem.
-                // For now, accept the louder one.
+
+                // IF existing is actually a harmonic of current (Missing Fundamental problem)
+                // e.g. Existing=220Hz (loud), Current=110Hz (quieter). We should REPLACE existing with current!
+                if (isHarmonic(currentPeak.frequency, existing.frequency)) {
+                    // Replace the harmonic with the fundamental
+                    finalizedPeaks[i] = currentPeak;
+                    isArtifact = true; // We handled it, don't push again
+                    break;
+                }
             }
 
             if (!isArtifact) {
                 finalizedPeaks.push(currentPeak);
+            }
 
-                // Remove harmonics of *this* peak from candidates to avoid double counting
-                // (e.g. if we picked 110Hz, remove 220Hz, 330Hz from potential list)
-                for (let i = peaks.length - 1; i >= 0; i--) {
-                    if (isHarmonic(currentPeak.frequency, peaks[i].frequency)) {
-                        peaks.splice(i, 1);
-                    }
+            // Remove harmonics of the current chosen fundamental from candidates
+            for (let i = peaks.length - 1; i >= 0; i--) {
+                if (isHarmonic(currentPeak.frequency, peaks[i].frequency)) {
+                    peaks.splice(i, 1);
                 }
             }
         }
