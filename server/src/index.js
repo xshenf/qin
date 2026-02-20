@@ -3,7 +3,7 @@ const express = require('express');
 console.log('express loaded');
 const cors = require('cors');
 console.log('cors loaded');
-let initDb, authRoutes, adminRoutes;
+let initDb, authRoutes, adminRoutes, historyRoutes;
 
 try {
     ({ initDb } = require('./db'));
@@ -12,6 +12,8 @@ try {
     console.log('authRoutes loaded');
     adminRoutes = require('./routes/admin');
     console.log('adminRoutes loaded');
+    historyRoutes = require('./routes/history');
+    console.log('historyRoutes loaded');
     require('dotenv').config();
     console.log('dotenv loaded');
 } catch (e) {
@@ -28,6 +30,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/user/history', historyRoutes);
 
 app.get('/', (req, res) => {
     res.send('Guitar Practice App Backend is running.');

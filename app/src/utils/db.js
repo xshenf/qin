@@ -25,7 +25,7 @@ export const initDB = () => {
     });
 };
 
-export const saveScore = async (id, name, data) => {
+export const saveScore = async (id, name, data, addTime = Date.now()) => {
     const db = await initDB();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
@@ -34,7 +34,7 @@ export const saveScore = async (id, name, data) => {
             id,
             name,
             data,
-            addTime: Date.now()
+            addTime
         };
         const request = store.put(item);
         request.onsuccess = () => resolve(item);

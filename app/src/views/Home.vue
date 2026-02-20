@@ -6,6 +6,9 @@ import AudioEngine from '../audio/AudioEngine';
 import PracticeEngine from '../engine/PracticeEngine';
 import PerformanceBar from '../components/PerformanceBar.vue';
 import { saveScore, getScoresList, getScoreData, deleteScore } from '../utils/db';
+import { syncHistoryToBackend, fetchHistoryFromBackend, fetchScoreDataFromBackend } from '../utils/api';
+import { useAuthStore } from '../stores/auth';
+import { useRouter } from 'vue-router';
 // import defaultScoreWithUrl from '../assets/gtp/Canon_D.gp5?url'; 
 
 const scoreViewer = ref(null);
@@ -342,7 +345,7 @@ const loadFileAndSave = async (file) => {
     scoreViewer.value.loadFile(file);
     try {
       await saveScore(file.name, file.name, file);
-      await loadHistory();
+      await loadHistory(file.name);
     } catch (e) {
       console.error("Failed to save score to history", e);
     }
@@ -462,9 +465,48 @@ const demoFile = ref(null);
 const isScoreLoaded = ref(false);
 const scoreHistory = ref([]);
 
-const loadHistory = async () => {
+const authStore = useAuthStore();
+const router = useRouter();
+
+const handleLoginToggle = async () => {
+  if (authStore.isAuthenticated) {
+    if (confirm("确定要退出登录吗？")) {
+      authStore.logout();
+    }
+  } else {
+    router.push('/login');
+  }
+};
+
+const loadHistory = async (syncDataId = null) => {
   try {
-    scoreHistory.value = await getScoresList();
+    let localHistory = await getScoresList();
+    if (authStore.isAuthenticated) {
+      const backendHistory = await fetchHistoryFromBackend();
+      const localMap = new Map();
+      localHistory.forEach(item => localMap.set(item.id, item));
+      
+      for (const bItem of backendHistory) {
+        const id = bItem.local_id || bItem.id;
+        const existing = localMap.get(id);
+        // If it's new, or the backend version has a newer addTime, update local stub
+        if (!existing || bItem.addTime > existing.addTime) {
+           localMap.set(id, { id: id, name: bItem.name, addTime: bItem.addTime });
+           
+           let existingData = null;
+           if (existing) {
+             const fullItem = await getScoreData(id);
+             if (fullItem) existingData = fullItem.data;
+           }
+           await saveScore(id, bItem.name, existingData, bItem.addTime);
+        }
+      }
+      
+      scoreHistory.value = Array.from(localMap.values()).sort((a, b) => b.addTime - a.addTime);
+      syncHistoryToBackend(scoreHistory.value, syncDataId).catch(console.error);
+    } else {
+      scoreHistory.value = localHistory;
+    }
   } catch (e) {
     console.error("Failed to load score history", e);
   }
@@ -473,6 +515,19 @@ const loadHistory = async () => {
 const loadFromHistory = async (id) => {
   try {
     const item = await getScoreData(id);
+    
+    // 如果本地只有壳数据没有 Blob 数据（即从云端同步过来的新设备），则去云端拉取 Blob
+    if (item && !item.data && authStore.isAuthenticated) {
+      const blob = await fetchScoreDataFromBackend(id);
+      if (blob) {
+        item.data = blob;
+        // 把拉取到的数据保存入本地补全
+        await saveScore(item.id, item.name, item.data, item.addTime);
+      } else {
+        throw new Error("同步该谱子数据失败，可能在云端已损坏或不存在");
+      }
+    }
+
     if (item && item.data) {
       if (scoreViewer.value) {
         isScoreLoaded.value = false;
@@ -482,7 +537,7 @@ const loadFromHistory = async (id) => {
         }
         scoreViewer.value.loadFile(item.data);
         
-        // 更新历史记录时间使其排到最前面
+        // 更新历史记录时间使其排到最前面, 不上传原来的数据
         saveScore(item.id, item.name, item.data).then(() => {
           loadHistory();
         }).catch(err => console.error("Update history time failed", err));
@@ -571,6 +626,17 @@ onUnmounted(() => {
         <div class="header-left" @click="closeScore" style="cursor: pointer;" title="返回首页">
           <img src="/qin-logo.svg" alt="Qin Logo" class="app-logo" />
         </div>
+        
+        <!-- 用户登录状态 -->
+        <div class="user-status" style="margin-left: 10px; cursor: pointer;" @click="handleLoginToggle">
+          <span v-if="authStore.isAuthenticated" style="color: #42b883; font-size: 0.9rem;" title="退出登录">
+            👤 {{ authStore.user?.email || authStore.user?.username || '已登录' }}
+          </span>
+          <span v-else style="color: #888; font-size: 0.9rem;">
+            登录/注册
+          </span>
+        </div>
+
         <div class="mobile-controls" v-if="isMobile">
            <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded">
             {{ isPlaying ? '⏸' : '▶' }}

@@ -9,7 +9,7 @@ import path from 'path'
 export default defineConfig(({ command }) => {
   const plugins = [
     vue(),
-    basicSsl(),
+    // basicSsl(),
     {
       name: 'html-transform',
       apply: 'build' as 'build',
