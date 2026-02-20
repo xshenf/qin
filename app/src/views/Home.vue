@@ -5,6 +5,7 @@ import Tuner from '../components/Tuner.vue';
 import AudioEngine from '../audio/AudioEngine';
 import PracticeEngine from '../engine/PracticeEngine';
 import PerformanceBar from '../components/PerformanceBar.vue';
+import { saveScore, getScoresList, getScoreData, deleteScore } from '../utils/db';
 // import defaultScoreWithUrl from '../assets/gtp/Canon_D.gp5?url'; 
 
 const scoreViewer = ref(null);
@@ -335,11 +336,23 @@ const formatRecordingTime = (seconds) => {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
+const loadFileAndSave = async (file) => {
+  if (scoreViewer.value) {
+    isScoreLoaded.value = false;
+    scoreViewer.value.loadFile(file);
+    try {
+      await saveScore(file.name, file.name, file);
+      await loadHistory();
+    } catch (e) {
+      console.error("Failed to save score to history", e);
+    }
+  }
+};
+
 const handleFileSelect = (event) => {
   const file = event.target.files[0];
   if (file && scoreViewer.value) {
-    isScoreLoaded.value = false; // Reset state while loading
-    scoreViewer.value.loadFile(file);
+    loadFileAndSave(file);
   }
 };
 
@@ -377,9 +390,7 @@ const handleDrop = (e) => {
         scoreViewer.value.stop();
         isPlaying.value = false;
       }
-      // 加载新文件
-      isScoreLoaded.value = false;
-      scoreViewer.value.loadFile(file);
+      loadFileAndSave(file);
     } else {
       alert('请拖入有效的 Guitar Pro 文件 (.gp, .gp3, .gp4, .gp5, .gpx, .gp7)');
     }
@@ -449,6 +460,48 @@ const onTrackChange = () => {
 
 const demoFile = ref(null);
 const isScoreLoaded = ref(false);
+const scoreHistory = ref([]);
+
+const loadHistory = async () => {
+  try {
+    scoreHistory.value = await getScoresList();
+  } catch (e) {
+    console.error("Failed to load score history", e);
+  }
+};
+
+const loadFromHistory = async (id) => {
+  try {
+    const item = await getScoreData(id);
+    if (item && item.data) {
+      if (scoreViewer.value) {
+        isScoreLoaded.value = false;
+        if (isPlaying.value) {
+          scoreViewer.value.stop();
+          isPlaying.value = false;
+        }
+        scoreViewer.value.loadFile(item.data);
+        
+        // 更新历史记录时间使其排到最前面
+        saveScore(item.id, item.name, item.data).then(() => {
+          loadHistory();
+        }).catch(err => console.error("Update history time failed", err));
+      }
+    }
+  } catch (e) {
+    alert("无法加载历史乐谱: " + e.message);
+  }
+};
+
+const removeHistoryItem = async (id, e) => {
+  e.stopPropagation();
+  try {
+    await deleteScore(id);
+    await loadHistory();
+  } catch(e) {
+    console.error("Error deleting history", e);
+  }
+};
 
 const handleScoreLoaded = (score) => {
     console.log("Score loaded:", score);
@@ -490,6 +543,7 @@ const handleKeydown = (e) => {
 
 onMounted(() => {
     window.addEventListener('keydown', handleKeydown);
+    loadHistory();
 });
 
 onUnmounted(() => {
@@ -683,8 +737,28 @@ onUnmounted(() => {
             <input type="file" accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7" @change="handleFileSelect" hidden />
           </label>
         </div>
-        
-        <div class="cards-grid">
+        <div class="history-section" v-if="scoreHistory.length > 0">
+          <div class="section-title">
+            <h3>最近打开</h3>
+          </div>
+          <div class="history-list">
+            <div 
+              class="history-item" 
+              v-for="item in scoreHistory" 
+              :key="item.id"
+              @click="loadFromHistory(item.id)"
+            >
+              <div class="item-icon">🎵</div>
+              <div class="item-info">
+                <div class="item-name">{{ item.name }}</div>
+                <div class="item-time">{{ new Date(item.addTime).toLocaleString() }}</div>
+              </div>
+              <button class="delete-btn" @click="(e) => removeHistoryItem(item.id, e)" title="删除记录">×</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="cards-grid" v-if="scoreHistory.length === 0">
           <div class="info-card">
             <div class="card-icon">📄</div>
             <h3>支持格式</h3>
@@ -1332,5 +1406,117 @@ main.layout-full :deep(.score-container) {
   margin: 0;
   line-height: 1.5;
   font-size: 0.95rem;
+}
+
+/* History Section */
+.history-section {
+  width: 100%;
+  max-width: 900px;
+  margin-bottom: auto; /* 配合 flex-start 垂直居中 */
+  background: #16213e;
+  border-radius: 12px;
+  border: 1px solid #2a2a4a;
+  overflow: hidden;
+}
+
+.section-title {
+  padding: 15px 20px;
+  border-bottom: 1px solid #2a2a4a;
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.section-title h3 {
+  margin: 0;
+  color: #42b883;
+  font-size: 1.1rem;
+}
+
+.history-list {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.history-item {
+  display: flex;
+  align-items: center;
+  padding: 15px 20px;
+  border-bottom: 1px solid #2a2a4a;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.history-item:hover {
+  background: rgba(66, 184, 131, 0.1);
+}
+
+.item-icon {
+  font-size: 1.5rem;
+  margin-right: 15px;
+  opacity: 0.8;
+}
+
+.item-info {
+  flex: 1;
+  overflow: hidden;
+}
+
+.item-name {
+  color: #e0e0e0;
+  font-weight: 500;
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.item-time {
+  color: #888;
+  font-size: 0.8rem;
+}
+
+.delete-btn {
+  background: transparent;
+  border: none;
+  color: #888;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 5px 10px;
+  min-height: auto;
+  min-width: auto;
+  line-height: 1;
+  opacity: 0;
+  transition: all 0.2s;
+}
+
+.history-item:hover .delete-btn {
+  opacity: 1;
+}
+
+.delete-btn:hover {
+  color: #e74c3c;
+  transform: scale(1.1);
+}
+
+@media (max-width: 768px) {
+  .hero-section {
+    margin-bottom: 30px;
+  }
+  
+  .history-section {
+    margin-bottom: 20px;
+  }
+  
+  .history-item {
+    padding: 12px 15px;
+  }
+  
+  .delete-btn {
+    opacity: 1; /* 移动端始终显示删除按钮 */
+    font-size: 1.2rem;
+  }
 }
 </style>
