@@ -15,6 +15,9 @@
     <p v-if="message" class="success">{{ message }}</p>
     <p v-if="error" class="error">{{ error }}</p>
     <p>Already have an account? <router-link to="/login">Login</router-link></p>
+    <div class="home-link">
+      <router-link to="/">返回主页</router-link>
+    </div>
   </div>
 </template>
 
@@ -78,5 +81,19 @@ button:hover {
 }
 .success {
     color: green;
+}
+.home-link {
+    margin-top: 20px;
+    text-align: center;
+    border-top: 1px solid #eee;
+    padding-top: 15px;
+}
+.home-link a {
+    color: #666;
+    text-decoration: none;
+    font-size: 0.9em;
+}
+.home-link a:hover {
+    color: #42b983;
 }
 </style>
