@@ -68,9 +68,9 @@
             {{ isPracticeMode ? '🎯 练习' : '🎯 练习' }}
           </button>
           
-          <button @click="testJumpCursor" class="tool-btn" style="margin-left: 5px; background-color: #8e44ad;" title="Debug跳跃光标">
+          <!-- <button @click="testJumpCursor" class="tool-btn" style="margin-left: 5px; background-color: #8e44ad;" title="Debug跳跃光标">
             测试光标
-          </button>
+          </button> -->
           
           <!-- <div class="monitor" v-if="isPracticeMode">
              <div class="monitor-item">

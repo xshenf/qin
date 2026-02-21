@@ -10,6 +10,13 @@
         <label>Password</label>
         <input type="password" v-model="password" required />
       </div>
+      <div class="form-group">
+        <label>验证码</label>
+        <div class="captcha-container">
+          <input type="text" v-model="captcha" placeholder="输入验证码" required />
+          <div class="captcha-image" v-html="captchaSvg" @click="refreshCaptcha" title="点击刷新验证码"></div>
+        </div>
+      </div>
       <button type="submit">Register</button>
     </form>
     <p v-if="message" class="success">{{ message }}</p>
@@ -27,18 +34,38 @@ import { useAuthStore } from '../stores/auth';
 
 const email = ref('');
 const password = ref('');
+const captcha = ref('');
+const captchaSvg = ref('');
 const message = ref('');
 const error = ref('');
 const authStore = useAuthStore();
+const router = useRouter();
+
+const refreshCaptcha = async () => {
+    try {
+        const response = await fetch('/api/auth/captcha');
+        captchaSvg.value = await response.text();
+    } catch (err) {
+        console.error('Failed to fetch captcha:', err);
+    }
+};
+
+import { onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+
+onMounted(() => {
+    refreshCaptcha();
+});
 
 const handleRegister = async () => {
     try {
-        await authStore.register(email.value, password.value);
+        await authStore.register(email.value, password.value, captcha.value);
         message.value = '注册成功！现在您可以直接登录了。';
         error.value = '';
     } catch (err) {
         error.value = err;
         message.value = '';
+        refreshCaptcha(); // Refresh captcha on failure
     }
 };
 </script>
@@ -81,6 +108,26 @@ button:hover {
 }
 .success {
     color: green;
+}
+.captcha-container {
+    display: flex;
+    gap: 10px;
+}
+.captcha-container input {
+    flex: 1;
+}
+.captcha-image {
+    cursor: pointer;
+    height: 40px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+}
+.captcha-image :deep(svg) {
+    height: 100%;
 }
 .home-link {
     margin-top: 20px;

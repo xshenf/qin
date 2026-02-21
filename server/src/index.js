@@ -26,6 +26,13 @@ const PORT = process.env.PORT || 3000;
 
 app.use(cors());
 app.use(express.json());
+const session = require('express-session');
+app.use(session({
+    secret: process.env.SESSION_SECRET || 'guitar-practice-secret',
+    resave: false,
+    saveUninitialized: true,
+    cookie: { secure: false } // Set to true if using HTTPS
+}));
 
 // Routes
 app.use('/api/auth', authRoutes);

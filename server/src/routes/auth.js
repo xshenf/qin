@@ -39,10 +39,32 @@ const sendVerificationEmail = async (email, token) => {
     }
 };
 
+// CAPTCHA generation
+const svgCaptcha = require('svg-captcha');
+
+router.get('/captcha', (req, res) => {
+    const captcha = svgCaptcha.create({
+        size: 4,
+        noise: 2,
+        color: true,
+        background: '#f0f0f0'
+    });
+    req.session.captcha = captcha.text.toLowerCase();
+    res.type('svg');
+    res.status(200).send(captcha.data);
+});
+
 // Register
 router.post('/register', async (req, res) => {
     try {
-        const { email, password } = req.body;
+        const { email, password, captcha } = req.body;
+
+        // Check CAPTCHA
+        if (!captcha || !req.session.captcha || captcha.toLowerCase() !== req.session.captcha) {
+            return res.status(400).json({ message: '验证码错误或已过期。' });
+        }
+        // Clear captcha after use
+        req.session.captcha = null;
 
         // Check if user exists
         const existingUser = await User.findOne({ where: { email } });

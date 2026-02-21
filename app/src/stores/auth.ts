@@ -2,7 +2,7 @@ import { defineStore } from 'pinia';
 import axios from 'axios';
 import { ref, computed } from 'vue';
 
-const API_URL = 'http://localhost:3000/api/auth';
+const API_URL = '/api/auth';
 
 export const useAuthStore = defineStore('auth', () => {
     const user = ref(JSON.parse(localStorage.getItem('user') || 'null'));
@@ -25,9 +25,9 @@ export const useAuthStore = defineStore('auth', () => {
         }
     }
 
-    async function register(email, password) {
+    async function register(email, password, captcha) {
         try {
-            await axios.post(`${API_URL}/register`, { email, password });
+            await axios.post(`${API_URL}/register`, { email, password, captcha }, { withCredentials: true });
             return true;
         } catch (error) {
             throw error.response?.data?.message || 'Registration failed';

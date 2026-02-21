@@ -80,6 +80,13 @@ export default defineConfig(({ command }) => {
       host: '0.0.0.0',
       port: 5175,
       // https: {} // Remove https for now to avoid complexity if not needed, or keep if basicSsl is used
+      proxy: {
+        '/api': {
+          target: 'http://localhost:3000',
+          changeOrigin: true,
+          // rewrite: (path) => path.replace(/^\/api/, ''), // Keep /api if the backend expects it
+        }
+      }
     }
   };
 })
