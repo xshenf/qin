@@ -1,3 +1,267 @@
+
+<template>
+  <div 
+    class="app-container"
+    @dragover="handleDragOver"
+    @dragleave="handleDragLeave"
+    @drop="handleDrop"
+  >
+    <!-- 拖放提示覆盖层 -->
+    <div v-if="isDragging" class="drag-overlay">
+      <div class="drag-hint">
+        <div class="drag-icon">📂</div>
+        <div class="drag-text">拖放GTP文件到此处</div>
+      </div>
+    </div>
+
+    <header>
+      <div class="header-bar">
+        <div class="header-left" @click="closeScore" style="cursor: pointer;" title="返回首页">
+          <img src="/qin-logo.svg" alt="Qin Logo" class="app-logo" />
+        </div>
+        
+        <!-- 用户登录状态 -->
+        <div class="user-status" style="margin-left: 10px; cursor: pointer;" @click="handleLoginToggle">
+          <span v-if="authStore.isAuthenticated" style="color: #42b883; font-size: 0.9rem;" title="退出登录">
+            👤 {{ authStore.user?.email || authStore.user?.username || '已登录' }}
+          </span>
+          <span v-else style="color: #888; font-size: 0.9rem;">
+            登录/注册
+          </span>
+        </div>
+
+        <div class="mobile-controls" v-if="isMobile">
+           <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded || isPracticeMode">
+            {{ isPlaying ? '⏸' : '▶' }}
+           </button>
+           <button @click="showToolbar = !showToolbar" :class="{ active: showToolbar }">
+             {{ showToolbar ? '🔼' : '🛠️' }}
+           </button>
+        </div>
+      </div>
+
+      <div class="toolbar" v-show="!isMobile || showToolbar">
+        <!-- 文件加载 -->
+        <div class="tool-group">
+          <label class="file-btn">
+            📂 加载
+            <input type="file" accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7" @change="handleFileSelect" hidden />
+          </label>
+        </div>
+
+        <!-- 播放控制 -->
+        <div class="tool-group">
+          <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded || isPracticeMode">
+            {{ isPlaying ? '⏸ 暂停' : '▶ 播放' }}
+          </button>
+        </div>
+
+        <!-- 练习模式 -->
+        <div class="tool-group">
+          <button 
+            @click="togglePractice" 
+            class="tool-btn" 
+            :class="{ active: isPracticeMode }"
+            title="开启智能练习/跟随模式"
+            :disabled="!isScoreLoaded"
+          >
+            {{ isPracticeMode ? '🎯 练习' : '🎯 练习' }}
+          </button>
+          
+          <button @click="testJumpCursor" class="tool-btn" style="margin-left: 5px; background-color: #8e44ad;" title="Debug跳跃光标">
+            测试光标
+          </button>
+          
+          <!-- <div class="monitor" v-if="isPracticeMode">
+             <div class="monitor-item">
+               <span class="label">评价</span>
+               <span class="value" :style="{ color: feedbackColor }">{{ tempoFeedback }}</span>
+             </div>
+          </div> -->
+        </div>
+
+        <!-- 乐器选择 -->
+        <div class="tool-group" v-if="tracks.length > 1">
+          <label class="control-label">乐器</label>
+          <select v-model="selectedTrackIndex" @change="onTrackChange" class="compact-select" style="max-width: 120px;">
+            <option v-for="track in tracks" :key="track.index" :value="track.index">
+              {{ track.name }}
+            </option>
+          </select>
+        </div>
+
+        <!-- 谱面类型 -->
+        <div class="tool-group">
+          <label class="control-label">谱面</label>
+          <select v-model="staveProfile" class="compact-select">
+            <option value="default">混合</option>
+            <option value="score">五线谱</option>
+            <option value="tab">六线谱</option>
+          </select>
+        </div>
+
+        <!-- 缩放 -->
+        <div class="tool-group">
+          <label class="control-label">缩放</label>
+          <select v-model.number="zoom" class="compact-select">
+            <option :value="50">50%</option>
+            <option :value="75">75%</option>
+            <option :value="100">100%</option>
+            <option :value="125">125%</option>
+            <option :value="150">150%</option>
+            <option :value="200">200%</option>
+          </select>
+        </div>
+
+        <!-- 播放速度 -->
+        <div class="tool-group">
+          <label class="control-label">速度</label>
+          <select v-model.number="playbackSpeed" class="compact-select">
+            <option :value="50">50%</option>
+            <option :value="75">75%</option>
+            <option :value="100">100%</option>
+            <option :value="125">125%</option>
+            <option :value="150">150%</option>
+          </select>
+        </div>
+
+
+        <!-- 全屏 -->
+        <div class="tool-group">
+          <button @click="toggleFullscreen" :class="{ active: isFullscreen }" title="全屏 / 横屏">
+            {{ isFullscreen ? '🔳' : '⛶' }}
+          </button>
+        </div>
+
+        <!-- 调音器/麦克风组 -->
+        <div class="tool-group">
+
+          
+          <!-- 低音增强开关 (仅在麦克风开启时显示，或者始终显示) -->
+          <button 
+            @click="bassBoost = !bassBoost" 
+            class="tool-btn"
+            :class="{ active: bassBoost }"
+            title="开启低音增强（推荐手机端开启）"
+          >
+            {{ bassBoost ? '增强:开' : '增强:关' }}
+          </button>
+          <button @click="toggleTuner" :class="{ active: showTuner }" title="调音器">
+            🎵
+          </button>
+          <!-- <div class="monitor" v-if="isMicActive">
+            <div class="monitor-item">
+              <span class="label">音高</span>
+              <span class="value">{{ detectedNote }}</span>
+            </div>
+          </div> -->
+        </div>
+
+        <!-- 录音 -->
+        <div class="tool-group">
+          <button @click="toggleRecording" :class="{ active: isRecording }" class="record-btn" title="录音">
+            <span v-if="isRecording" class="recording-dot"></span>
+            {{ isRecording ? '⏺ 停止' : '⏺ 录音' }}
+          </button>
+          <button 
+            v-if="recordedAudioUrl && !isRecording" 
+            @click="togglePlayRecording" 
+            :class="{ active: isPlayingRecording }"
+            title="播放录音"
+          >
+            {{ isPlayingRecording ? '⏸' : '▶️' }}
+          </button>
+          <button v-if="recordedAudioUrl && !isRecording" @click="saveRecording" title="保存录音">
+            💾
+          </button>
+          <button v-if="recordedAudioUrl && !isRecording" @click="clearRecording" title="删除录音">
+            🗑️
+          </button>
+          <div class="monitor" v-if="isRecording">
+            <div class="monitor-item">
+              <span class="label">时长</span>
+              <span class="value">{{ formatRecordingTime(recordingTime) }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <PerformanceBar v-if="isPracticeMode" :detectedPitch="detectedPitchObj" />
+
+    <main class="layout-full">
+      <div v-if="!isScoreLoaded" class="empty-state">
+        <div class="hero-section">
+          <p>拖放GTP文件到此处，或者点击下方按钮打开</p>
+          <label class="hero-btn">
+            📂 打开乐谱文件
+            <input type="file" accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7" @change="handleFileSelect" hidden />
+          </label>
+        </div>
+        <div class="history-section" v-if="scoreHistory.length > 0">
+          <div class="section-title">
+            <h3>最近打开</h3>
+          </div>
+          <div class="history-list">
+            <div 
+              class="history-item" 
+              v-for="item in scoreHistory" 
+              :key="item.id"
+              @click="loadFromHistory(item.id)"
+            >
+              <div class="item-icon">🎵</div>
+              <div class="item-info">
+                <div class="item-name">{{ item.name }}</div>
+                <div class="item-time">{{ new Date(item.addTime).toLocaleString() }}</div>
+              </div>
+              <button class="delete-btn" @click="(e) => removeHistoryItem(item.id, e)" title="删除记录">×</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="cards-grid" v-if="scoreHistory.length === 0">
+          <div class="info-card">
+            <div class="card-icon">📄</div>
+            <h3>支持格式</h3>
+            <p>支持所有主流GTP格式：.gp, .gp5, .gpx, .gp3, .gp4</p>
+          </div>
+          <div class="info-card">
+            <div class="card-icon">🛠️</div>
+            <h3>强大工具</h3>
+            <p>内置调音器、录音机、以及智能练习模式，助你高效练琴</p>
+          </div>
+          <div class="info-card">
+            <div class="card-icon">⚡</div>
+            <h3>快捷操作</h3>
+            <p>使用空格键播放/暂停，支持全屏模式和多种显示比例</p>
+          </div>
+        </div>
+      </div>
+
+      <ScoreViewer 
+        class="score-viewer-layer"
+        ref="scoreViewer" 
+        :file-url="demoFile"
+        :zoom="zoom"
+        :stave-profile="staveProfile"
+        :playback-speed="playbackSpeed"
+        @playerReady="handleScoreReady"
+        @playerFinished="isPlaying = false"
+        @isPlayingChanged="(playing) => isPlaying = playing"
+        @scoreLoaded="handleScoreLoaded"
+      />
+    </main>
+
+    <!-- 调音器面板 -->
+    <Tuner 
+      :is-active="showTuner"
+      :detected-note="detectedNote"
+      :detected-pitch="detectedFrequency"
+      @close="showTuner = false"
+    />
+  </div>
+</template>
+
 <script setup>
 import { ref, nextTick, watch, onMounted, onUnmounted } from 'vue';
 import ScoreViewer from '../components/ScoreViewer.vue';
@@ -64,27 +328,38 @@ const testJumpCursor = () => {
   }
 };
 
+
+const openPractice = () => {
+  isPracticeMode.value = true;
+  if (isPlaying.value) {
+    // 暂停正规播放，进入跟随
+    scoreViewer.value?.playPause();
+    isPlaying.value = false;
+  }
+
+  // Connect pitch callback for PerformanceBar
+  PracticeEngine.setPitchCallback((data) => {
+      detectedPitchObj.value = data;
+  });
+  
+  PracticeEngine.setFollowMode(true);
+  PracticeEngine.start();
+}
+
+const closePractice = () => {
+  isPracticeMode.value = false;
+  PracticeEngine.setFollowMode(false);
+  PracticeEngine.stop();
+  detectedPitchObj.value = null; // Clear bar
+  tempoFeedback.value = '--';
+}
+
 const togglePractice = () => {
   isPracticeMode.value = !isPracticeMode.value;
   if (isPracticeMode.value) {
-    if (isPlaying.value) {
-      // 暂停正规播放，进入跟随
-      scoreViewer.value?.playPause();
-      isPlaying.value = false;
-    }
-
-    // Connect pitch callback for PerformanceBar
-    PracticeEngine.setPitchCallback((data) => {
-        detectedPitchObj.value = data;
-    });
-    
-    PracticeEngine.setFollowMode(true);
-    PracticeEngine.start();
+    openPractice();
   } else {
-    PracticeEngine.setFollowMode(false);
-    PracticeEngine.stop();
-    detectedPitchObj.value = null; // Clear bar
-    tempoFeedback.value = '--';
+    closePractice()
   }
 };
 
@@ -594,7 +869,7 @@ const closeScore = () => {
         scoreViewer.value.stop();
         scoreViewer.value.clear();
     }
-    PracticeEngine.stop();
+    closePractice();
     
     // Clean up current Demo file reference if any
     demoFile.value = null;
@@ -622,271 +897,6 @@ onUnmounted(() => {
     window.removeEventListener('keydown', handleKeydown);
 });
 </script>
-
-<template>
-  <div 
-    class="app-container"
-    @dragover="handleDragOver"
-    @dragleave="handleDragLeave"
-    @drop="handleDrop"
-  >
-    <!-- 拖放提示覆盖层 -->
-    <div v-if="isDragging" class="drag-overlay">
-      <div class="drag-hint">
-        <div class="drag-icon">📂</div>
-        <div class="drag-text">拖放 Guitar Pro 文件到此处</div>
-      </div>
-    </div>
-
-    <header>
-      <div class="header-bar">
-        <div class="header-left" @click="closeScore" style="cursor: pointer;" title="返回首页">
-          <img src="/qin-logo.svg" alt="Qin Logo" class="app-logo" />
-        </div>
-        
-        <!-- 用户登录状态 -->
-        <div class="user-status" style="margin-left: 10px; cursor: pointer;" @click="handleLoginToggle">
-          <span v-if="authStore.isAuthenticated" style="color: #42b883; font-size: 0.9rem;" title="退出登录">
-            👤 {{ authStore.user?.email || authStore.user?.username || '已登录' }}
-          </span>
-          <span v-else style="color: #888; font-size: 0.9rem;">
-            登录/注册
-          </span>
-        </div>
-
-        <div class="mobile-controls" v-if="isMobile">
-           <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded || isPracticeMode">
-            {{ isPlaying ? '⏸' : '▶' }}
-           </button>
-           <button @click="showToolbar = !showToolbar" :class="{ active: showToolbar }">
-             {{ showToolbar ? '🔼' : '🛠️' }}
-           </button>
-        </div>
-      </div>
-
-      <div class="toolbar" v-show="!isMobile || showToolbar">
-        <!-- 文件加载 -->
-        <div class="tool-group">
-          <label class="file-btn">
-            📂 加载
-            <input type="file" accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7" @change="handleFileSelect" hidden />
-          </label>
-        </div>
-
-        <!-- 播放控制 -->
-        <div class="tool-group">
-          <button @click="togglePlayback" :class="{ active: isPlaying }" :disabled="!isScoreLoaded || isPracticeMode">
-            {{ isPlaying ? '⏸ 暂停' : '▶ 播放' }}
-          </button>
-        </div>
-
-        <!-- 练习模式 -->
-        <div class="tool-group">
-          <button 
-            @click="togglePractice" 
-            class="tool-btn" 
-            :class="{ active: isPracticeMode }"
-            title="开启智能练习/跟随模式"
-            :disabled="!isScoreLoaded"
-          >
-            {{ isPracticeMode ? '🎯 练习/跟随中' : '🎯 练习/跟随' }}
-          </button>
-          
-          <button @click="testJumpCursor" class="tool-btn" style="margin-left: 5px; background-color: #8e44ad;" title="Debug跳跃光标">
-            测试光标
-          </button>
-          
-          <div class="monitor" v-if="isPracticeMode">
-             <div class="monitor-item">
-               <span class="label">评价</span>
-               <span class="value" :style="{ color: feedbackColor }">{{ tempoFeedback }}</span>
-             </div>
-          </div>
-        </div>
-
-        <!-- 乐器选择 -->
-        <div class="tool-group" v-if="tracks.length > 1">
-          <label class="control-label">乐器</label>
-          <select v-model="selectedTrackIndex" @change="onTrackChange" class="compact-select" style="max-width: 120px;">
-            <option v-for="track in tracks" :key="track.index" :value="track.index">
-              {{ track.name }}
-            </option>
-          </select>
-        </div>
-
-        <!-- 谱面类型 -->
-        <div class="tool-group">
-          <label class="control-label">谱面</label>
-          <select v-model="staveProfile" class="compact-select">
-            <option value="default">混合</option>
-            <option value="score">五线谱</option>
-            <option value="tab">六线谱</option>
-          </select>
-        </div>
-
-        <!-- 缩放 -->
-        <div class="tool-group">
-          <label class="control-label">缩放</label>
-          <select v-model.number="zoom" class="compact-select">
-            <option :value="50">50%</option>
-            <option :value="75">75%</option>
-            <option :value="100">100%</option>
-            <option :value="125">125%</option>
-            <option :value="150">150%</option>
-            <option :value="200">200%</option>
-          </select>
-        </div>
-
-        <!-- 播放速度 -->
-        <div class="tool-group">
-          <label class="control-label">速度</label>
-          <select v-model.number="playbackSpeed" class="compact-select">
-            <option :value="50">50%</option>
-            <option :value="75">75%</option>
-            <option :value="100">100%</option>
-            <option :value="125">125%</option>
-            <option :value="150">150%</option>
-          </select>
-        </div>
-
-
-        <!-- 全屏 -->
-        <div class="tool-group">
-          <button @click="toggleFullscreen" :class="{ active: isFullscreen }" title="全屏 / 横屏">
-            {{ isFullscreen ? '🔳' : '⛶' }}
-          </button>
-        </div>
-
-        <!-- 调音器/麦克风组 -->
-        <div class="tool-group">
-
-          
-          <!-- 低音增强开关 (仅在麦克风开启时显示，或者始终显示) -->
-          <button 
-            @click="bassBoost = !bassBoost" 
-            class="tool-btn"
-            :class="{ active: bassBoost }"
-            title="开启低音增强（推荐手机端开启）"
-          >
-            {{ bassBoost ? '增强:开' : '增强:关' }}
-          </button>
-          <button @click="toggleTuner" :class="{ active: showTuner }" title="调音器">
-            🎵
-          </button>
-          <div class="monitor" v-if="isMicActive">
-            <div class="monitor-item">
-              <span class="label">音高</span>
-              <span class="value">{{ detectedNote }}</span>
-            </div>
-          </div>
-        </div>
-
-        <!-- 录音 -->
-        <div class="tool-group">
-          <button @click="toggleRecording" :class="{ active: isRecording }" class="record-btn" title="录音">
-            <span v-if="isRecording" class="recording-dot"></span>
-            {{ isRecording ? '⏺ 停止' : '⏺ 录音' }}
-          </button>
-          <button 
-            v-if="recordedAudioUrl && !isRecording" 
-            @click="togglePlayRecording" 
-            :class="{ active: isPlayingRecording }"
-            title="播放录音"
-          >
-            {{ isPlayingRecording ? '⏸' : '▶️' }}
-          </button>
-          <button v-if="recordedAudioUrl && !isRecording" @click="saveRecording" title="保存录音">
-            💾
-          </button>
-          <button v-if="recordedAudioUrl && !isRecording" @click="clearRecording" title="删除录音">
-            🗑️
-          </button>
-          <div class="monitor" v-if="isRecording">
-            <div class="monitor-item">
-              <span class="label">时长</span>
-              <span class="value">{{ formatRecordingTime(recordingTime) }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </header>
-
-    <PerformanceBar v-if="isPracticeMode" :detectedPitch="detectedPitchObj" />
-
-    <main class="layout-full">
-      <div v-if="!isScoreLoaded" class="empty-state">
-        <div class="hero-section">
-          <div class="hero-icon">🎸</div>
-          <h2>没有加载乐谱</h2>
-          <p>拖放GTP文件到此处，或者点击下方按钮打开</p>
-          <label class="hero-btn">
-            📂 打开乐谱文件
-            <input type="file" accept=".gp,.gp3,.gp4,.gp5,.gpx,.gp7" @change="handleFileSelect" hidden />
-          </label>
-        </div>
-        <div class="history-section" v-if="scoreHistory.length > 0">
-          <div class="section-title">
-            <h3>最近打开</h3>
-          </div>
-          <div class="history-list">
-            <div 
-              class="history-item" 
-              v-for="item in scoreHistory" 
-              :key="item.id"
-              @click="loadFromHistory(item.id)"
-            >
-              <div class="item-icon">🎵</div>
-              <div class="item-info">
-                <div class="item-name">{{ item.name }}</div>
-                <div class="item-time">{{ new Date(item.addTime).toLocaleString() }}</div>
-              </div>
-              <button class="delete-btn" @click="(e) => removeHistoryItem(item.id, e)" title="删除记录">×</button>
-            </div>
-          </div>
-        </div>
-
-        <div class="cards-grid" v-if="scoreHistory.length === 0">
-          <div class="info-card">
-            <div class="card-icon">📄</div>
-            <h3>支持格式</h3>
-            <p>支持所有主流GTP格式：.gp, .gp5, .gpx, .gp3, .gp4</p>
-          </div>
-          <div class="info-card">
-            <div class="card-icon">🛠️</div>
-            <h3>强大工具</h3>
-            <p>内置调音器、录音机、以及智能练习模式，助你高效练琴</p>
-          </div>
-          <div class="info-card">
-            <div class="card-icon">⚡</div>
-            <h3>快捷操作</h3>
-            <p>使用空格键播放/暂停，支持全屏模式和多种显示比例</p>
-          </div>
-        </div>
-      </div>
-
-      <ScoreViewer 
-        class="score-viewer-layer"
-        ref="scoreViewer" 
-        :file-url="demoFile"
-        :zoom="zoom"
-        :stave-profile="staveProfile"
-        :playback-speed="playbackSpeed"
-        @playerReady="handleScoreReady"
-        @playerFinished="isPlaying = false"
-        @isPlayingChanged="(playing) => isPlaying = playing"
-        @scoreLoaded="handleScoreLoaded"
-      />
-    </main>
-
-    <!-- 调音器面板 -->
-    <Tuner 
-      :is-active="showTuner"
-      :detected-note="detectedNote"
-      :detected-pitch="detectedFrequency"
-      @close="showTuner = false"
-    />
-  </div>
-</template>
 
 <style scoped>
 .app-container {
@@ -1499,6 +1509,7 @@ main.layout-full :deep(.score-container) {
 .history-section {
   width: 100%;
   max-width: 900px;
+  min-height: 300px;
   margin-bottom: auto; /* 配合 flex-start 垂直居中 */
   background: #16213e;
   border-radius: 12px;

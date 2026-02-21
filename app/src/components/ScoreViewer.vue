@@ -1,3 +1,18 @@
+<template>
+  <div class="score-wrapper">
+    <div ref="scoreContainer" class="score-container"></div>
+    <!-- Markers Overlay -->
+    <div class="markers-overlay">
+      <div 
+        v-for="(marker, index) in markers" 
+        :key="index"
+        :class="marker.class"
+        :style="marker.style"
+      ></div>
+    </div>
+  </div>
+</template>
+
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { soundFontUrl } from '../utils/soundFont';
@@ -506,7 +521,7 @@ const testCursorMove = () => {
         // When stopped, force the layouter to render again
         // AlphaTab's renderer can be told to update and scroll natively
         if (api.renderer) {
-            api.render();
+            //api.render();
         }
         
         console.log("TEST JUMP: New tick:", api.tickPosition);
@@ -526,21 +541,6 @@ defineExpose({
   testCursorMove
 });
 </script>
-
-<template>
-  <div class="score-wrapper">
-    <div ref="scoreContainer" class="score-container"></div>
-    <!-- Markers Overlay -->
-    <div class="markers-overlay">
-      <div 
-        v-for="(marker, index) in markers" 
-        :key="index"
-        :class="marker.class"
-        :style="marker.style"
-      ></div>
-    </div>
-  </div>
-</template>
 
 <style scoped>
 .score-wrapper {
