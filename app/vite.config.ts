@@ -1,7 +1,7 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { alphaTab } from '@coderline/alphatab-vite'
-import basicSsl from '@vitejs/plugin-basic-ssl'
+import { VitePWA } from 'vite-plugin-pwa'
 import fs from 'fs'
 import path from 'path'
 
@@ -9,6 +9,28 @@ import path from 'path'
 export default defineConfig(({ command }) => {
   const plugins = [
     vue(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'qin-logo.svg'],
+      manifest: {
+        name: 'Qin Guitar',
+        short_name: 'Qin',
+        description: 'Guitar Practice & Score Viewer',
+        theme_color: '#1a1a2e',
+        icons: [
+          {
+            src: 'qin-logo.svg',
+            sizes: '192x192',
+            type: 'image/svg+xml'
+          },
+          {
+            src: 'qin-logo.svg',
+            sizes: '512x512',
+            type: 'image/svg+xml'
+          }
+        ]
+      }
+    }),
     // basicSsl(),
     {
       name: 'html-transform',
