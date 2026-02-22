@@ -276,22 +276,22 @@ const needleClass = computed(() => {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: linear-gradient(135deg, #1e1e2e 0%, #2a2a4a 100%);
-  border: 2px solid #42b883;
-  border-radius: 12px;
-  padding: 20px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 24px;
   z-index: 1000;
-  min-width: 400px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  min-width: 420px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 .tuner-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid #3a3a5a;
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
 }
 
 .tuner-header h3 {
@@ -341,10 +341,10 @@ const needleClass = computed(() => {
 
 .string-item {
   text-align: center;
-  padding: 8px;
-  background: #2a2a4a;
-  border-radius: 6px;
-  border: 2px solid transparent;
+  padding: 10px 8px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
   transition: all 0.2s;
 }
 
@@ -360,9 +360,9 @@ const needleClass = computed(() => {
 }
 
 .string-note {
-  font-size: 1rem;
+  font-size: 1.1rem;
   font-weight: bold;
-  color: #e0e0e0;
+  color: #1e293b;
   margin-bottom: 2px;
 }
 
@@ -373,13 +373,13 @@ const needleClass = computed(() => {
 
 .detected-pitch {
   text-align: center;
-  margin-bottom: 20px;
-  padding: 15px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 8px;
+  margin-bottom: 24px;
+  padding: 20px;
+  background: #f1f5f9;
+  border-radius: 12px;
   border: 3px solid transparent; /* 预留边框空间防止抖动 */
   transition: all 0.3s ease;
-  min-height: 150px; /* 预留高度给徽章 */
+  min-height: 160px; /* 预留高度给徽章 */
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -403,10 +403,10 @@ const needleClass = computed(() => {
 }
 
 .pitch-note {
-  font-size: 3rem;
+  font-size: 3.5rem;
   font-weight: bold;
-  color: #e0e0e0;
-  font-family: monospace;
+  color: #1e293b;
+  font-family: 'Outfit', sans-serif;
   transition: all 0.3s ease;
 }
 
@@ -559,13 +559,18 @@ const needleClass = computed(() => {
 }
 
 .note-select, .octave-select {
-  background: #1e1e2e;
-  border: 1px solid #444;
-  color: white;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
   border-radius: 4px;
   padding: 2px;
   font-size: 0.9rem;
   width: 45px;
+  outline: none;
+}
+
+.note-select:hover, .octave-select:hover {
+  border-color: #42b883;
 }
 
 .string-item.editing {
@@ -582,12 +587,12 @@ const needleClass = computed(() => {
   position: absolute;
   top: 60px;
   right: 20px;
-  background: #2a2a4a;
-  border: 1px solid #444;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 8px;
   padding: 10px;
   z-index: 1010;
-  box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
   max-height: 300px;
   overflow-y: auto;
 }
@@ -596,9 +601,9 @@ const needleClass = computed(() => {
   padding: 8px 12px;
   cursor: pointer;
   border-radius: 4px;
-  color: #e0e0e0;
+  color: #1e293b;
   font-size: 0.9rem;
-  transition: background 0.2s;
+  transition: all 0.2s;
 }
 
 .preset-item:hover {

@@ -103,12 +103,13 @@ const getPitchClass = (item) => {
 .performance-bar {
   display: flex;
   align-items: center;
-  background: rgba(0, 0, 0, 0.8);
+  background: rgba(255, 255, 255, 0.9);
   height: 80px; /* Increased height for cards */
   padding: 0 16px;
-  color: white;
-  border-top: 1px solid #333;
+  color: #1e293b;
+  border-top: 1px solid #e2e8f0;
   overflow: hidden;
+  backdrop-filter: blur(8px);
 }
 
 .pitch-stream {
@@ -133,14 +134,14 @@ const getPitchClass = (item) => {
   min-width: 30px;
   padding: 2px 4px;
   border-radius: 4px;
-  background: #222;
-  border: 1px solid #444;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
   font-size: 0.8em;
 }
 
-.pitch-item.perfect { border-color: #42b883; color: #42b883; }
-.pitch-item.good { border-color: #aaa; color: #eee; }
-.pitch-item.bad { border-color: #ff4444; color: #ff4444; }
+.pitch-item.perfect { border-color: #42b883; color: #42b883; background: #ecfdf5; }
+.pitch-item.good { border-color: #cbd5e1; color: #475569; }
+.pitch-item.bad { border-color: #ef4444; color: #ef4444; background: #fef2f2; }
 
 .active-notes {
     display: flex;
@@ -159,21 +160,21 @@ const getPitchClass = (item) => {
 }
 
 .current-note-card {
-    background: #2a2a3a;
-    border: 1px solid #444;
-    border-radius: 6px;
-    padding: 5px 10px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    min-width: 60px;
-    box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 6px 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 64px;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .main-note {
-    font-size: 1.2em;
-    font-weight: bold;
-    color: #fff;
+  font-size: 1.3em;
+  font-weight: bold;
+  color: #1e293b;
 }
 
 .cents-val {
@@ -183,12 +184,13 @@ const getPitchClass = (item) => {
 }
 
 .meter-container {
-    width: 40px;
-    height: 4px;
-    background: #111;
+    width: 44px;
+    height: 6px;
+    background: #f1f5f9;
     position: relative;
-    margin: 4px 0;
-    border-radius: 2px;
+    margin: 6px 0;
+    border-radius: 3px;
+    border: 1px solid #e2e8f0;
 }
 .meter-center {
     position: absolute;

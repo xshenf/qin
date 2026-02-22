@@ -45,8 +45,8 @@ body {
   margin: 0;
   padding: 0;
   font-family: 'Inter', sans-serif;
-  background-color: #1a1a2e;
-  color: #e0e0e0;
+  background-color: #f8fafc;
+  color: #1e293b;
 }
 
 .app-layout {
@@ -56,15 +56,15 @@ body {
 }
 
 .main-nav {
-  background-color: #16213e;
+  background-color: #ffffff;
   padding: 10px 20px;
-  border-bottom: 1px solid #2a2a4a;
+  border-bottom: 1px solid #e2e8f0;
   display: flex;
   justify-content: flex-end;
 }
 
 .nav-links a {
-  color: #e0e0e0;
+  color: #475569;
   text-decoration: none;
   margin: 0 5px;
 }
@@ -81,6 +81,6 @@ body {
 
 .user-info {
   margin-right: 10px;
-  color: #888;
+  color: #94a3b8;
 }
 </style>

@@ -903,23 +903,29 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  width: 100%;
-  padding: 0;
-  margin: 0;
-  background: #1a1a2e;
-  color: #e0e0e0;
-  overflow-x: hidden;
+  background-color: #f8fafc;
+  color: #1e293b;
+  position: relative;
+  overflow: hidden;
+}
+
+header {
+  background-color: #ffffff;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 8px 16px;
+  z-index: 100;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  background: linear-gradient(135deg, #16213e 0%, #1a1a2e 100%);
-  padding: 10px 20px;
-  box-shadow: 0 2px 10px rgba(0,0,0,0.4);
-  z-index: 10;
-  border-bottom: 1px solid #2a2a4a;
+  /* background: linear-gradient(135deg, #16213e 0%, #1a1a2e 100%); */
+  /* padding: 10px 20px; */
+  /* box-shadow: 0 2px 10px rgba(0,0,0,0.4); */
+  /* z-index: 10; */
+  /* border-bottom: 1px solid #2a2a4a; */
   flex-shrink: 0;
 }
 
@@ -958,16 +964,22 @@ header {
 
 .toolbar {
   display: flex;
-  gap: 8px;
+  flex-wrap: wrap;
+  gap: 12px;
   align-items: center;
+  padding: 8px 0;
+  background-color: #ffffff;
 }
 
 .tool-group {
   display: flex;
-  gap: 4px;
   align-items: center;
-  padding: 0 6px;
-  border-right: 1px solid #333355;
+  gap: 8px;
+  padding: 4px 10px;
+  background: transparent;
+  border-radius: 6px;
+  border: none;
+  transition: all 0.2s;
 }
 
 .tool-group:last-child {
@@ -975,20 +987,21 @@ header {
 }
 
 .control-label {
-  font-size: 0.75rem;
-  color: #888;
-  white-space: nowrap;
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 600;
 }
 
 .compact-select {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  color: #1e293b;
   padding: 4px 8px;
-  background: #2a2a4a;
-  color: #e0e0e0;
-  border: 1px solid #3a3a5a;
   border-radius: 4px;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
+  outline: none;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: border-color 0.2s;
 }
 
 .compact-select:hover {
@@ -996,40 +1009,40 @@ header {
 }
 
 .file-btn {
-  padding: 5px 12px;
-  background: #2a2a4a;
-  color: #e0e0e0;
-  border: 1px solid #3a3a5a;
-  border-radius: 4px;
+  padding: 6px 14px;
+  background: #f1f5f9;
+  color: #1e293b;
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
   transition: all 0.2s;
 }
 
 .file-btn:hover {
-  background: #3a3a5a;
-  border-color: #42b883;
+  background: #e2e8f0;
+  transform: translateY(-1px);
 }
 
 button {
-  padding: 5px 12px;
-  background: #2a2a4a;
-  color: #e0e0e0;
-  border: 1px solid #3a3a5a;
-  border-radius: 4px;
+  padding: 6px 14px;
+  background: #f1f5f9;
+  color: #1e293b;
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
   transition: all 0.2s;
-  font-size: 0.8rem;
+  font-size: 0.85rem;
 }
 
 button:hover {
-  background: #3a3a5a;
-  border-color: #42b883;
+  background: #e2e8f0;
+  transform: translateY(-1px);
 }
 
 button.active {
   background: #42b883;
-  color: #1a1a2e;
+  color: #ffffff;
   border-color: #42b883;
 }
 
@@ -1072,9 +1085,10 @@ button.record-btn.active {
   display: flex;
   gap: 8px;
   align-items: center;
-  background: rgba(0, 0, 0, 0.2);
+  background: transparent;
   padding: 4px 10px;
   border-radius: 4px;
+  border: none;
 }
 
 .monitor-item {
@@ -1143,12 +1157,13 @@ main.layout-full :deep(.score-container) {
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(26, 26, 46, 0.95);
+  background: rgba(248, 250, 252, 0.9);
   z-index: 9999;
   display: flex;
   align-items: center;
   justify-content: center;
   pointer-events: none;
+  backdrop-filter: blur(4px);
 }
 
 .drag-hint {
@@ -1354,13 +1369,14 @@ main.layout-full :deep(.score-container) {
 }
 
 .app-container:fullscreen header {
-  background: rgba(22, 33, 62, 0.95);
+  background: rgba(255, 255, 255, 0.95);
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   z-index: 100;
   backdrop-filter: blur(10px);
+  border-bottom: 1px solid #e2e8f0;
 }
 
 .app-container:fullscreen main {
@@ -1411,7 +1427,7 @@ main.layout-full :deep(.score-container) {
   justify-content: flex-start;
   padding: 40px;
   box-sizing: border-box;
-  background: #1a1a2e;
+  background: #f8fafc;
   overflow-y: auto;
 }
 
@@ -1448,7 +1464,7 @@ main.layout-full :deep(.score-container) {
   display: inline-block;
   padding: 12px 24px;
   background: #42b883;
-  color: #1a1a2e;
+  color: #ffffff;
   border-radius: 8px;
   font-size: 1rem;
   font-weight: bold;
@@ -1473,12 +1489,13 @@ main.layout-full :deep(.score-container) {
 }
 
 .info-card {
-  background: #16213e;
+  background: #ffffff;
   padding: 24px;
   border-radius: 12px;
-  border: 1px solid #2a2a4a;
+  border: 1px solid #e2e8f0;
   text-align: center;
   transition: all 0.2s;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .info-card:hover {
@@ -1511,16 +1528,17 @@ main.layout-full :deep(.score-container) {
   max-width: 900px;
   min-height: 300px;
   margin-bottom: auto; /* 配合 flex-start 垂直居中 */
-  background: #16213e;
+  background: #ffffff;
   border-radius: 12px;
-  border: 1px solid #2a2a4a;
+  border: 1px solid #e2e8f0;
   overflow: hidden;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
 }
 
 .section-title {
   padding: 15px 20px;
-  border-bottom: 1px solid #2a2a4a;
-  background: rgba(0, 0, 0, 0.2);
+  border-bottom: 1px solid #e2e8f0;
+  background: #f8fafc;
 }
 
 .section-title h3 {
@@ -1538,7 +1556,7 @@ main.layout-full :deep(.score-container) {
   display: flex;
   align-items: center;
   padding: 15px 20px;
-  border-bottom: 1px solid #2a2a4a;
+  border-bottom: 1px solid #e2e8f0;
   cursor: pointer;
   transition: background 0.2s;
 }
@@ -1563,7 +1581,7 @@ main.layout-full :deep(.score-container) {
 }
 
 .item-name {
-  color: #e0e0e0;
+  color: #1e293b;
   font-weight: 500;
   margin-bottom: 4px;
   white-space: nowrap;
