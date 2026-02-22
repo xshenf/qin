@@ -1,10 +1,16 @@
+import { Capacitor } from '@capacitor/core';
+import * as nativeStore from './androidStorage';
+
 export const DB_NAME = 'QinGuitarAppDB';
 export const DB_VERSION = 1;
 export const STORE_NAME = 'scores_history';
 
 let dbInstance = null;
+const isNative = Capacitor.isNativePlatform();
 
 export const initDB = () => {
+    if (isNative) return null; // Native uses Preferences/Filesystem
+
     return new Promise((resolve, reject) => {
         if (dbInstance) {
             resolve(dbInstance);
@@ -37,9 +43,14 @@ const getUserPrefix = () => {
 };
 
 export const saveScore = async (id, name, data, addTime = Date.now()) => {
-    const db = await initDB();
     const prefix = getUserPrefix();
     const realId = `${prefix}${id}`;
+
+    if (isNative) {
+        return await nativeStore.saveScoreNative(realId, name, data, addTime);
+    }
+
+    const db = await initDB();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
@@ -56,8 +67,20 @@ export const saveScore = async (id, name, data, addTime = Date.now()) => {
 };
 
 export const getScoresList = async () => {
-    const db = await initDB();
     const prefix = getUserPrefix();
+
+    if (isNative) {
+        const nativeList = await nativeStore.getScoresListNative();
+        return nativeList
+            .filter(item => String(item.id).startsWith(prefix))
+            .map(item => {
+                const originalId = String(item.id).substring(prefix.length);
+                return { id: originalId, name: item.name, addTime: item.addTime };
+            })
+            .sort((a, b) => b.addTime - a.addTime);
+    }
+
+    const db = await initDB();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readonly');
         const store = transaction.objectStore(STORE_NAME);
@@ -75,9 +98,18 @@ export const getScoresList = async () => {
 };
 
 export const getScoreData = async (id) => {
-    const db = await initDB();
     const prefix = getUserPrefix();
     const realId = `${prefix}${id}`;
+
+    if (isNative) {
+        const result = await nativeStore.getScoreDataNative(realId);
+        if (result) {
+            result.id = id;
+        }
+        return result;
+    }
+
+    const db = await initDB();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readonly');
         const store = transaction.objectStore(STORE_NAME);
@@ -94,9 +126,14 @@ export const getScoreData = async (id) => {
 };
 
 export const deleteScore = async (id) => {
-    const db = await initDB();
     const prefix = getUserPrefix();
     const realId = `${prefix}${id}`;
+
+    if (isNative) {
+        return await nativeStore.deleteScoreNative(realId);
+    }
+
+    const db = await initDB();
     return new Promise((resolve, reject) => {
         const transaction = db.transaction([STORE_NAME], 'readwrite');
         const store = transaction.objectStore(STORE_NAME);
