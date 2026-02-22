@@ -63,9 +63,11 @@ export const syncHistoryToBackend = async (historyList, syncDataId = null) => {
             };
         }));
 
-        return api.post('/user/history/sync', { history: syncData });
+        const response = await api.post('/user/history/sync', { history: syncData });
+        return response;
     } catch (e) {
-        console.error("Sync data error", e);
+        console.error("Sync data error (non-blocking):", e);
+        return null;
     }
 };
 

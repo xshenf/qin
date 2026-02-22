@@ -636,7 +636,7 @@ const loadFileAndSave = async (file) => {
     scoreViewer.value.loadFile(file);
     try {
       await saveScore(file.name, file.name, file);
-      await loadHistory(file.name);
+      loadHistory(file.name).catch(console.error); // Non-blocking
     } catch (e) {
       console.error("Failed to save score to history", e);
     }
@@ -795,7 +795,7 @@ const loadHistory = async (syncDataId = null) => {
       }
       
       scoreHistory.value = Array.from(localMap.values()).sort((a, b) => b.addTime - a.addTime);
-      syncHistoryToBackend(scoreHistory.value, syncDataId).catch(console.error);
+      syncHistoryToBackend(scoreHistory.value, syncDataId); // Non-blocking, handled by its own catch
     } else {
       scoreHistory.value = localHistory;
     }
