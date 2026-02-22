@@ -959,7 +959,6 @@ header {
 .app-logo {
   height: 32px;
   width: 32px;
-  border-radius: 6px;
 }
 
 .toolbar {
