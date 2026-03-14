@@ -903,6 +903,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   background-color: #f8fafc;
   color: #1e293b;
   position: relative;
@@ -910,7 +911,7 @@ onUnmounted(() => {
 }
 
 header {
-  background-color: #ffffff;
+  background-color: #1fffff;
   border-bottom: 1px solid #e2e8f0;
   padding: 8px 16px;
   z-index: 100;
@@ -921,11 +922,6 @@ header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  /* background: linear-gradient(135deg, #16213e 0%, #1a1a2e 100%); */
-  /* padding: 10px 20px; */
-  /* box-shadow: 0 2px 10px rgba(0,0,0,0.4); */
-  /* z-index: 10; */
-  /* border-bottom: 1px solid #2a2a4a; */
   flex-shrink: 0;
 }
 
@@ -1379,7 +1375,7 @@ main.layout-full :deep(.score-container) {
 }
 
 .app-container:fullscreen main {
-  padding-top: 60px;
+  padding-top: calc(60px + env(safe-area-inset-top));
 }
 
 /* 全屏横屏模式 - 最大化乐谱显示 */
@@ -1399,7 +1395,7 @@ main.layout-full :deep(.score-container) {
   }
 
   .app-container:fullscreen main {
-    padding-top: 45px;
+    padding-top: calc(45px + env(safe-area-inset-top));
   }
 }
 
