@@ -15,13 +15,14 @@
 
 <script setup>
 import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
-import { soundFontUrl } from '../utils/soundFont';
-import { FONT_DIRECTORY } from '../config/alphaTabConfig';
+import { FONT_DIRECTORY, SOUND_FONT_URL } from '../config/alphaTabConfig';
 import * as alphaTab from '@coderline/alphatab';
 import PracticeEngine from '../engine/PracticeEngine';
 
 const scoreContainer = ref(null);
 let api = null;
+let isPlayerReady = false; // 标记播放器是否真正准备好
+let apiVersion = 0; // 用于区分不同的 API 实例，防止旧事件闭包干扰
 
 const props = defineProps({
   fileUrl: {
@@ -48,38 +49,44 @@ const emit = defineEmits([
   'playedBeatChanged',
   'activeBeatsChanged',
   'scoreLoaded',
-  'scoreLoaded',
   'playerPositionChanged',
   'isPlayingChanged'
 ]);
+
+// ========== 核心：创建和销毁 AlphaTab API ==========
+
+const destroyApi = () => {
+  if (api) {
+    try {
+      api.destroy();
+    } catch (e) {
+      console.warn("AlphaTab destroy error (ignored):", e.message);
+    }
+    api = null;
+  }
+  isPlayerReady = false;
+};
 
 const initAlphaTab = () => {
   if (!scoreContainer.value) {
     console.error("ScoreContainer not found!");
     return;
   }
-  // Check if we already initialized for this URL effectively?
-  // But we want to re-init if needed.
-  
-  console.log("Initializing AlphaTab...", props.fileUrl);
 
+  // 防止重复初始化
   if (api) {
-    try {
-        api.destroy();
-    } catch(e) {
-        console.warn("Cleanup error", e);
-    }
-    // Also remove any existing content in container just in case
-    if (scoreContainer.value) {
-        scoreContainer.value.innerHTML = '';
-    }
+    console.log("AlphaTab API already exists, skipping init");
+    return;
   }
 
-  const settings = {
-    // file: props.fileUrl || '', // Ensure valid file url is passed
+  console.log("Initializing AlphaTab...");
 
+  // 每次创建新实例时递增版本号
+  apiVersion++;
+  const myVersion = apiVersion;
+
+  const settings = {
     core: {
-      // Tell AlphaTab where to find fonts (Use CDN to reduce build size)
       fontDirectory: FONT_DIRECTORY,
       useWorkers: false
     },
@@ -96,11 +103,9 @@ const initAlphaTab = () => {
       enableCursor: true,
       enableAnimatedBeatCursor: true,
       enableElementHighlighting: true,
-      enableElementHighlighting: true,
-      // Use CDN for SoundFont to reduce build size (1.3MB)
-      soundFont: soundFontUrl.value,
+      soundFont: SOUND_FONT_URL,
       scrollElement: scoreContainer.value.parentElement,
-      scrollSpeed: 10,        // 调整滚动速度 (更小的值 = 更快的动画?) 尝试 100ms
+      scrollSpeed: 10,
       scrollOffsetX: 0,
     }
   };
@@ -113,59 +118,43 @@ const initAlphaTab = () => {
     api = new alphaTab.AlphaTabApi(scoreContainer.value, settings);
     api.playbackSpeed = props.playbackSpeed / 100;
     console.log("AlphaTab API created successfully");
-    
-    // Debug events - commented out to reduce noise
-    /*
-    api.error.on((e) => {
-      console.error('AlphaTab Error Event:', e);
-    });
-    api.renderFinished.on(() => {
-      console.log('AlphaTab Render Finished');
-    });
-    */
   } catch (e) {
     console.error("Error creating AlphaTab API:", e);
+    api = null;
+    return;
   }
 
-  // Attach events
-  
-  // NOTE: AlphaTabApi.on() adds listeners. When we create a NEW api instance,
-  // the old listeners are garbage collected with the old instance (assuming destroy() worked).
-  // However, if destroy() failed or if we bound to something global, we'd have issues.
-  // The 'api' variable is local to this scope but updated in the outer 'api' let var.
-  
-  // Events - using correct AlphaTab v1.8 event names
+  // 绑定事件 - 所有事件回调内部都检查版本号，防止旧闭包干扰
   api.scoreLoaded.on((score) => {
-    // console.log('Score loaded:', score.title);
+    if (apiVersion !== myVersion) return;
     emit('scoreLoaded', score);
   });
 
   api.playerStateChanged.on((args) => {
-    // args.state where 0=Stopped, 1=Playing, 2=Paused
-    // We consider 'Playing' (1) as isPlaying=true.
+    if (apiVersion !== myVersion) return;
+    // args.state: 0=Stopped, 1=Playing, 2=Paused
     const isPlaying = args.state === 1;
     emit('isPlayingChanged', isPlaying);
   });
 
-  let playerReadyTimeout;
   api.playerReady.on(() => {
-    // Debounce playerReady to prevent multiple fires
-    clearTimeout(playerReadyTimeout);
-    playerReadyTimeout = setTimeout(() => {
-        // console.log('Player ready');
-        PracticeEngine.attachScore(api); 
-        emit('playerReady', api);
-    }, 50);
+    if (apiVersion !== myVersion) return;
+    console.log("Player ready");
+    isPlayerReady = true;
+    PracticeEngine.attachScore(api);
+    emit('playerReady', api);
   });
 
   api.playerFinished.on(() => {
+    if (apiVersion !== myVersion) return;
     emit('playerFinished');
   });
 
   api.playedBeatChanged.on((beat) => {
+    if (apiVersion !== myVersion) return;
     emit('playedBeatChanged', beat);
     
-    // Push notes to PracticeEngine
+    // 推送音符给练习引擎
     if (beat && beat.notes) {
       const notes = beat.notes.map(n => ({
         id: n.id,
@@ -173,274 +162,170 @@ const initAlphaTab = () => {
         string: n.string,
         startTick: beat.start,
         duration: beat.duration,
-        ref: n // Keep reference to AlphaTab note object
+        ref: n
       }));
       PracticeEngine.updateExpectedNotes(notes);
     }
   });
-
-  // ... (other events)
 };
 
-// ...
+// ========== Marker 标记逻辑 ==========
 
-// Marker logic
-const markers = ref([]); // Array of { style, class }
+const markers = ref([]);
 
 const markNote = (note, status) => {
   if (!api || !note) return;
-  console.log(`Coloring note: ${status}`, note);
   
-  // Determine the actual AlphaTab note object
-  // PracticeEngine passes the raw AlphaTab note object as 'noteRef'
-  // But sometimes it might be wrapped.
   const noteObj = note.ref ? note.ref : note;
+  if (!noteObj || typeof noteObj !== 'object') return;
 
-  // Validate it's an object (simple check)
-  if (!noteObj || typeof noteObj !== 'object') {
-     // console.warn("Invalid note object for marking", note);
-      return;
-  }
-
-  // Use AlphaTab NoteStyle to change color
-  // Status: hit (green), miss (red)
-  const color = status === 'hit' ? 'rgba(66, 184, 131, 1)' : 'rgba(255, 0, 0, 1)';
-  
-  // Note: We need to ensure we have access to AlphaTab model classes.
-  // Assuming 'api' has access or we can just set properties if they are simple objects.
-  // But AlphaTab usually requires class instances for Style.
-  
-  // Let's try to set style on the note.
   try {
-      
-      // We need alphaTab namespace. 
-      // imports are: import * as alphaTab from '@coderline/alphatab';
-      
-      const NoteStyle = alphaTab.model.NoteStyle;
-      const NoteSubElement = alphaTab.model.NoteSubElement;
-      const Color = alphaTab.model.Color;
+    const NoteStyle = alphaTab.model.NoteStyle;
+    const NoteSubElement = alphaTab.model.NoteSubElement;
+    const Color = alphaTab.model.Color;
 
-      if (!NoteStyle || !NoteSubElement || !Color) {
-          console.error("AlphaTab model classes missing.", { NoteStyle, NoteSubElement, Color });
-          return;
-      }
+    if (!NoteStyle || !NoteSubElement || !Color) return;
 
-      if (!noteObj.style) {
-          noteObj.style = new NoteStyle();
-      }
-      
-      // Parse color string to r,g,b,a? 
-      // AlphaTab Color constructor: (a, r, g, b)
-      let atColor;
-      if (status === 'hit') {
-          atColor = new Color(255, 66, 184, 131); 
-      } else {
-          atColor = new Color(255, 255, 0, 0);
-      }
-      
-      noteObj.style.colors.set(NoteSubElement.NoteHead, atColor);
-      noteObj.style.colors.set(NoteSubElement.Stem, atColor); // also color stem
-
-      // Trigger re-render with batching
-      requestRender();
-      
+    if (!noteObj.style) {
+      noteObj.style = new NoteStyle();
+    }
+    
+    let atColor;
+    if (status === 'hit') {
+      atColor = new Color(255, 66, 184, 131); 
+    } else {
+      atColor = new Color(255, 255, 0, 0);
+    }
+    
+    noteObj.style.colors.set(NoteSubElement.NoteHead, atColor);
+    noteObj.style.colors.set(NoteSubElement.Stem, atColor);
+    requestRender();
   } catch (e) {
-      console.error("Error coloring note:", e);
+    console.error("Error coloring note:", e);
   }
 };
 
 let renderPending = false;
 const requestRender = () => {
-    if (!api || renderPending) return;
-    renderPending = true;
-    requestAnimationFrame(() => {
-        if (api) {
-            api.render();
-        }
-        renderPending = false;
-    });
+  if (!api || renderPending) return;
+  renderPending = true;
+  requestAnimationFrame(() => {
+    if (api) {
+      api.render();
+    }
+    renderPending = false;
+  });
 };
 
-onMounted(() => {
-  console.log("ScoreViewer Mounted");
-  initAlphaTab();
-});
+// ========== 对外暴露的方法 ==========
 
-onUnmounted(() => {
-  console.log("ScoreViewer Unmounted");
-  if (api) {
-        try {
-            api.destroy();
-        } catch (e) {
-            console.warn("Error destroying AlphaTab:", e);
-        }
-        api = null;
-    }
-});
-
-// ...
-
-// Expose methods
 const playPause = () => {
-  if (!api || !api.player) return;
-  
+  if (!api) return;
+  if (!isPlayerReady) {
+    console.warn("Player not ready yet, ignoring playPause");
+    return;
+  }
   try {
-      // Check audio context state if possible (though AlphaTab hides it mostly)
-      // Just wrap in try-catch to be safe
-      api.playPause();
+    api.playPause();
   } catch (e) {
-      console.warn("Play/Pause error:", e);
+    console.warn("Play/Pause error:", e);
   }
 };
 
 const stop = () => {
-    if (!api || !api.player) return;
-    try {
-        api.pause();
-        api.tickPosition = 0; 
-    } catch (e) {
-        console.warn("Error stopping player:", e);
-    }
+  if (!api) return;
+  if (!isPlayerReady) return;
+  try {
+    api.pause();
+    api.tickPosition = 0; 
+  } catch (e) {
+    console.warn("Error stopping player:", e);
+  }
 };
 
 const clear = () => {
-    if (api) {
-        try {
-            api.destroy();
-        } catch (e) {
-            console.warn("Error destroying API:", e);
-        }
-        api = null;
-    }
-    if (scoreContainer.value) {
-        scoreContainer.value.innerHTML = '';
-    }
-    markers.value = [];
+  // 销毁 API 实例
+  destroyApi();
+  // 清空容器内容
+  if (scoreContainer.value) {
+    scoreContainer.value.innerHTML = '';
+  }
+  markers.value = [];
 };
 
 const getApi = () => api;
-// ...
+
 const loadFile = (file) => {
-  if (!api) return;
-  
-  // Stop player before loading new file to avoid conflicts
-  try {
-      api.pause();
-  } catch(e) {}
-  
+  // 确保 API 存在，如果之前被 clear() 销毁过，需要重新初始化
+  if (!api) {
+    initAlphaTab();
+  }
+  if (!api) {
+    console.error("Failed to create AlphaTab API for loading file");
+    return;
+  }
+
+  // 重置播放就绪状态，防止在加载期间触发播放
+  isPlayerReady = false;
+
   const reader = new FileReader();
   reader.onload = (e) => {
-    if (e.target?.result) {
-      if (api) {
-          api.load(e.target.result);
-      } else {
-          // If api is not ready (which shouldn't happen if loaded), queue or init?
-          // Actually, if we are invisible, api might not be created yet.
-          // But loadFile is called when we select a file.
-          // If we are in empty state, ScoreViewer is v-show="false" (or true now).
-          // Wait, Home.vue uses v-show. So element exists but display:none?
-          // v-show="isScoreLoaded" -> if false, display:none.
-          // So dimensions are 0.
-          
-          // We need to ensure we don't init AlphaTab until visible.
-          // But loadFile is what triggers isScoreLoaded=true in Home.vue (eventually).
-          
-          // Actually, Home.vue handles file loading, then sets isScoreLoaded=true.
-          // Then ScoreViewer becomes visible.
-          // Then we should init/load.
-          
-          // Let's defer loading until we have dimensions.
-          pendingLoadData = e.target.result;
-          checkVisibilityAndInit();
-      }
+    if (e.target?.result && api) {
+      api.load(e.target.result);
     }
   };
   reader.readAsArrayBuffer(file);
 };
 
-let pendingLoadData = null;
+// ========== 生命周期 ==========
+
 let resizeObserver = null;
-
-const checkVisibilityAndInit = () => {
-    if (!scoreContainer.value) return;
-    
-    // Check if visible and has width
-    const rect = scoreContainer.value.getBoundingClientRect();
-    
-    // Strict check: if width is 0, we are invisible (e.g. display:none from v-show)
-    if (rect.width === 0 || rect.height === 0) {
-        // console.log("Skipping AlphaTab init - container invisible");
-        return;
-    }
-
-    if (!api) {
-        initAlphaTab();
-    }
-    
-    if (api && pendingLoadData) {
-        try {
-            api.load(pendingLoadData);
-            pendingLoadData = null;
-        } catch (e) {
-            console.error("Error loading pending data", e);
-        }
-    }
-};
 
 onMounted(() => {
   console.log("ScoreViewer Mounted");
   
-  // Use ResizeObserver to detect when we become visible/resized
+  // 使用 ResizeObserver 检测容器何时可见
   resizeObserver = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-           // Only trigger if we have dimensions
-          if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
-              checkVisibilityAndInit();
-          }
+    for (const entry of entries) {
+      if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+        // 仅在 API 未创建时执行初始化
+        if (!api) {
+          initAlphaTab();
+        }
       }
+    }
   });
   
   if (scoreContainer.value) {
-      resizeObserver.observe(scoreContainer.value);
+    resizeObserver.observe(scoreContainer.value);
   }
   
-  // Try init immediately if already visible
-  checkVisibilityAndInit();
+  // 如果已经可见，立即初始化
+  if (scoreContainer.value) {
+    const rect = scoreContainer.value.getBoundingClientRect();
+    if (rect.width > 0 && rect.height > 0) {
+      initAlphaTab();
+    }
+  }
 });
 
 onUnmounted(() => {
   console.log("ScoreViewer Unmounted");
   if (resizeObserver) {
-      resizeObserver.disconnect();
-      resizeObserver = null;
+    resizeObserver.disconnect();
+    resizeObserver = null;
   }
-  if (api) {
-        try {
-            api.destroy();
-        } catch (e) {
-            console.warn("Error destroying AlphaTab:", e);
-        }
-        api = null;
-    }
+  destroyApi();
 });
 
+// ========== watchers ==========
 
 watch(
   () => props.fileUrl,
   (newUrl) => {
-    if (newUrl) {
-      console.log("Loading new file from watch:", newUrl);
-      if (api) {
-        try {
-          api.pause();
-        } catch (e) {
-          // Ignore parsing errors or if user wasn't playing
-        }
-        api.load(newUrl);
-      } else {
-        pendingLoadData = newUrl;
-        checkVisibilityAndInit();
-      }
+    if (newUrl && api) {
+      isPlayerReady = false;
+      api.load(newUrl);
     }
   }
 );
@@ -467,13 +352,7 @@ watch(() => props.playbackSpeed, (val) => {
   }
 });
 
-watch(soundFontUrl, (newUrl) => {
-  if (api && newUrl) {
-    console.log("Updating SoundFont URL to:", newUrl);
-    api.settings.player.soundFont = newUrl;
-    api.updateSettings();
-  }
-});
+// ========== 辅助函数 ==========
 
 const getStaveProfile = (profile) => {
   const map = {
@@ -486,48 +365,30 @@ const getStaveProfile = (profile) => {
 
 const renderTrack = (track) => {
   if (!api) return;
-  console.log("Rendering track:", track);
-  // AlphaTab API: renderTracks accepts an array of track objects or track indexes?
-  // Documentation says: renderTracks(tracks: Track[])
-  // So we need to pass the track object(s) we want to render.
-  // If track is an index, we get it from api.score.tracks
   
   let targetTracks = [];
   if (typeof track === 'number') {
-      if (api.score && api.score.tracks && api.score.tracks[track]) {
-          targetTracks = [api.score.tracks[track]];
-      }
+    if (api.score && api.score.tracks && api.score.tracks[track]) {
+      targetTracks = [api.score.tracks[track]];
+    }
   } else if (typeof track === 'object') {
-      targetTracks = [track];
+    targetTracks = [track];
   }
   
   if (targetTracks.length > 0) {
-      api.renderTracks(targetTracks);
+    api.renderTracks(targetTracks);
   }
 };
-// ...
 
-// Expose methods
 const testCursorMove = () => {
-    if (!api) return;
-    try {
-        const currentTick = api.tickPosition;
-        console.log("TEST JUMP: Previous tick:", currentTick);
-        const newTick = currentTick + 960; // Jump 1 quarter note
-        
-        // This setter updates internal state
-        api.tickPosition = newTick;
-        
-        // When stopped, force the layouter to render again
-        // AlphaTab's renderer can be told to update and scroll natively
-        if (api.renderer) {
-            //api.render();
-        }
-        
-        console.log("TEST JUMP: New tick:", api.tickPosition);
-    } catch (e) {
-        console.warn("TEST JUMP ERROR:", e);
-    }
+  if (!api) return;
+  try {
+    const currentTick = api.tickPosition;
+    const newTick = currentTick + 960;
+    api.tickPosition = newTick;
+  } catch (e) {
+    console.warn("TEST JUMP ERROR:", e);
+  }
 };
 
 defineExpose({
@@ -550,7 +411,7 @@ defineExpose({
   overflow-y: auto;
   background: white;
   box-sizing: border-box;
-  position: relative; /* For markers overlay */
+  position: relative;
 }
 .score-container {
   min-height: 100%;
@@ -592,7 +453,7 @@ defineExpose({
 }
 
 .at-cursor-beat {
-  background: #0a47a499 !important; /* 使用主题色 */
+  background: #0a47a499 !important;
   will-change: left, top;
   z-index: -100;
 }

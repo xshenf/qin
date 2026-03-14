@@ -700,7 +700,7 @@ const togglePlayback = () => {
 };
 
 const handleScoreReady = (api) => {
-  console.log("Score loaded!", api);
+  console.log("Player ready!", api);
   PracticeEngine.attachScore(api);
   
   // 设置练习回调
