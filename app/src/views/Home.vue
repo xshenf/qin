@@ -911,7 +911,7 @@ onUnmounted(() => {
 }
 
 header {
-  background-color: #1fffff;
+  background-color: #ffffff;
   border-bottom: 1px solid #e2e8f0;
   padding: 8px 16px;
   z-index: 100;
