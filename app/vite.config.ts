@@ -4,7 +4,7 @@ import { alphaTab } from '@coderline/alphatab-vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
 // https://vite.dev/config/
-export default defineConfig(({ command }) => {
+export default defineConfig(() => {
   const plugins = [
     vue(),
     VitePWA({
@@ -32,15 +32,12 @@ export default defineConfig(({ command }) => {
     // basicSsl(),
   ];
 
-  if (command === 'serve') {
-    // alphaTab plugin might return an array of plugins, so we spread it if necessary
-    // or push it directly if it's a single plugin object.
-    const atPlugin = alphaTab();
-    if (Array.isArray(atPlugin)) {
-      plugins.push(...atPlugin);
-    } else {
-      plugins.push(atPlugin);
-    }
+  // 把 AlphaTab Vite 插件应用到所有环境（用于正确处理 worker/wasm 依赖或特殊引入）
+  const atPlugin = alphaTab();
+  if (Array.isArray(atPlugin)) {
+    plugins.push(...atPlugin);
+  } else {
+    plugins.push(atPlugin);
   }
 
   // 构建配置项
